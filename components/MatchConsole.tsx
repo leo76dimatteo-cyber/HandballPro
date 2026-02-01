@@ -1,37 +1,62 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Match, Player, EventType, MatchEvent } from '../types';
-import { Play, Pause, RotateCcw, Award, AlertTriangle, XCircle, ShieldCheck, Pencil, Check, X, Settings2, Coffee, Plus, Minus, Zap, UserCog, Ban } from 'lucide-react';
+import { Play, Pause, RotateCcw, Award, AlertTriangle, XCircle, ShieldCheck, Pencil, Check, X, Settings2, Coffee, Plus, Minus, Zap, UserCog, Ban, Undo2, Trash2, Clock, RefreshCcw, Target, Shield, ChevronUp, ChevronDown } from 'lucide-react';
 
 interface MatchConsoleProps {
   match: Match;
   onUpdate: (updatedMatch: Match) => void;
   onFinish: () => void;
+  t: any;
 }
 
-const MatchConsole: React.FC<MatchConsoleProps> = ({ match, onUpdate, onFinish }) => {
-  const [seconds, setSeconds] = useState(0);
+const MatchConsole: React.FC<MatchConsoleProps> = ({ match, onUpdate, onFinish, t }) => {
+  const matchRef = useRef(match);
+  
+  useEffect(() => {
+    matchRef.current = match;
+  }, [match]);
+
+  const [seconds, setSeconds] = useState(match.currentTime || 0);
+  const [currentPeriod, setCurrentPeriod] = useState(match.currentPeriod || 1);
   const [isActive, setIsActive] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState<{person: Player, team: 'HOME' | 'AWAY', isStaff: boolean} | null>(null);
   
   const [isTimeoutActive, setIsTimeoutActive] = useState(false);
   const [timeoutSeconds, setTimeoutSeconds] = useState(60);
   const [timeoutTeam, setTimeoutTeam] = useState<'HOME' | 'AWAY' | null>(null);
-  const timeoutStartRef = useRef<number>(0);
 
-  const [currentPeriod, setCurrentPeriod] = useState(1);
   const [periodDurations, setPeriodDurations] = useState<{ [key: number]: number }>({
     1: 1800, 2: 1800, 3: 600, 4: 600
   });
   
   const [isEditingTime, setIsEditingTime] = useState(false);
   const [isEditingSettings, setIsEditingSettings] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<MatchEvent | null>(null);
   const [editMins, setEditMins] = useState('');
   const [editSecs, setEditSecs] = useState('');
   const [timeIsUp, setTimeIsUp] = useState(false);
 
   const targetSeconds = periodDurations[currentPeriod];
 
+  // Calcola il punteggio basato sugli eventi
+  const calculateCurrentScore = (events: MatchEvent[]) => {
+    return {
+      home: events.filter(e => e.team === 'HOME' && e.type === EventType.GOAL).length,
+      away: events.filter(e => e.team === 'AWAY' && e.type === EventType.GOAL).length
+    };
+  };
+
+  const syncTimeWithParent = (newSeconds: number, newPeriod: number) => {
+    const current = matchRef.current;
+    onUpdate({
+      ...current,
+      currentTime: newSeconds,
+      currentPeriod: newPeriod,
+    });
+  };
+
+  // Timer del Match
   useEffect(() => {
     let interval: any = null;
     if (isActive && !isTimeoutActive) {
@@ -41,7 +66,11 @@ const MatchConsole: React.FC<MatchConsoleProps> = ({ match, onUpdate, onFinish }
           if (next >= targetSeconds) {
             setIsActive(false);
             setTimeIsUp(true);
+            syncTimeWithParent(targetSeconds, currentPeriod);
             return targetSeconds;
+          }
+          if (next % 10 === 0) {
+            syncTimeWithParent(next, currentPeriod);
           }
           return next;
         });
@@ -50,8 +79,9 @@ const MatchConsole: React.FC<MatchConsoleProps> = ({ match, onUpdate, onFinish }
       clearInterval(interval);
     }
     return () => clearInterval(interval);
-  }, [isActive, isTimeoutActive, targetSeconds]);
+  }, [isActive, isTimeoutActive, targetSeconds, currentPeriod]);
 
+  // Timer del Time-out
   useEffect(() => {
     let interval: any = null;
     if (isTimeoutActive) {
@@ -59,6 +89,7 @@ const MatchConsole: React.FC<MatchConsoleProps> = ({ match, onUpdate, onFinish }
         setTimeoutSeconds(prev => {
           if (prev <= 1) {
             clearInterval(interval);
+            setIsTimeoutActive(false);
             return 0;
           }
           return prev - 1;
@@ -68,17 +99,49 @@ const MatchConsole: React.FC<MatchConsoleProps> = ({ match, onUpdate, onFinish }
     return () => clearInterval(interval);
   }, [isTimeoutActive]);
 
-  useEffect(() => {
-    if (timeIsUp) {
-      const timer = setTimeout(() => setTimeIsUp(false), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [timeIsUp]);
-
   const formatTime = (totalSeconds: number) => {
     const mins = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Correzione manuale del punteggio (senza eventi)
+  const manualScoreAdjustment = (team: 'HOME' | 'AWAY', delta: number) => {
+    const currentMatch = matchRef.current;
+    const newScore = { ...currentMatch.score };
+    if (team === 'HOME') {
+      newScore.home = Math.max(0, newScore.home + delta);
+    } else {
+      newScore.away = Math.max(0, newScore.away + delta);
+    }
+    onUpdate({ ...currentMatch, score: newScore });
+  };
+
+  const handleStartTimeout = (team: 'HOME' | 'AWAY') => {
+    if (isTimeoutActive) return;
+    setIsActive(false);
+    setIsTimeoutActive(true);
+    setTimeoutSeconds(60);
+    setTimeoutTeam(team);
+    
+    const newEvent: MatchEvent = {
+      id: Math.random().toString(36).substr(2, 9),
+      type: EventType.TIMEOUT,
+      playerId: 'T-' + team,
+      playerName: `TIME-OUT ${team === 'HOME' ? match.homeTeamName : match.awayTeamName}`,
+      team,
+      isStaff: true,
+      timestamp: Date.now(),
+      gameTime: `${currentPeriod}°T - ${formatTime(seconds)}`
+    };
+
+    const currentMatch = matchRef.current;
+    onUpdate({
+      ...currentMatch,
+      events: [...currentMatch.events, newEvent],
+      currentTime: seconds,
+      currentPeriod: currentPeriod
+    });
   };
 
   const handleEditTime = () => {
@@ -90,52 +153,14 @@ const MatchConsole: React.FC<MatchConsoleProps> = ({ match, onUpdate, onFinish }
     setIsActive(false);
   };
 
-  const adjustCurrentEditTime = (deltaSeconds: number) => {
-    const currentMins = parseInt(editMins) || 0;
-    const currentSecs = parseInt(editSecs) || 0;
-    const currentTotal = (currentMins * 60) + currentSecs;
-    const newVal = Math.max(0, Math.min(currentTotal + deltaSeconds, targetSeconds));
-    setEditMins(Math.floor(newVal / 60).toString());
-    setEditSecs((newVal % 60).toString().padStart(2, '0'));
-  };
-
   const saveEditedTime = () => {
     const m = parseInt(editMins) || 0;
     const s = parseInt(editSecs) || 0;
     const total = (m * 60) + Math.min(s, 59);
-    setSeconds(Math.min(total, targetSeconds));
+    const finalVal = Math.min(total, targetSeconds);
+    setSeconds(finalVal);
+    syncTimeWithParent(finalVal, currentPeriod);
     setIsEditingTime(false);
-  };
-
-  const handlePresetDuration = (mins: number) => {
-    setPeriodDurations({ ...periodDurations, [currentPeriod]: mins * 60 });
-    setSeconds(0);
-    setIsActive(false);
-  };
-
-  const handleStartTimeout = (team: 'HOME' | 'AWAY') => {
-    setIsActive(false);
-    setTimeoutTeam(team);
-    setTimeoutSeconds(60);
-    setIsTimeoutActive(true);
-    timeoutStartRef.current = Date.now();
-  };
-
-  const handleEndTimeout = () => {
-    const durationUsed = Math.round((Date.now() - timeoutStartRef.current) / 1000);
-    const newEvent: MatchEvent = {
-      id: Math.random().toString(36).substr(2, 9),
-      type: EventType.TIMEOUT,
-      playerId: 'SYSTEM',
-      playerName: timeoutTeam === 'HOME' ? match.homeTeamName : match.awayTeamName,
-      team: timeoutTeam!,
-      timestamp: Date.now(),
-      gameTime: `${currentPeriod}°T - ${formatTime(seconds)}`,
-      duration: durationUsed
-    };
-    onUpdate({ ...match, events: [...match.events, newEvent] });
-    setIsTimeoutActive(false);
-    setTimeoutTeam(null);
   };
 
   const addEvent = (type: EventType) => {
@@ -154,19 +179,62 @@ const MatchConsole: React.FC<MatchConsoleProps> = ({ match, onUpdate, onFinish }
       gameTime: `${currentPeriod}°T - ${formatTime(seconds)}`
     };
 
-    const newScore = { ...match.score };
-    if (type === EventType.GOAL) {
-      if (team === 'HOME') newScore.home += 1;
-      else newScore.away += 1;
-    }
-
+    const currentMatch = matchRef.current;
+    const newEvents = [...currentMatch.events, newEvent];
+    const newScore = calculateCurrentScore(newEvents);
+    
+    // Manteniamo eventuali correzioni manuali se presenti?
+    // Per ora, l'aggiunta di un evento ricalcola basandosi sugli eventi stessi.
     onUpdate({
-      ...match,
-      events: [...match.events, newEvent],
-      score: newScore
+      ...currentMatch,
+      events: newEvents,
+      score: newScore,
+      currentTime: seconds,
+      currentPeriod: currentPeriod
     });
-
     setSelectedPerson(null);
+  };
+
+  const deleteEvent = (eventId: string) => {
+    const currentMatch = matchRef.current;
+    if (!window.confirm(t.confirmDeleteEvent || "Eliminare questa azione?")) return;
+    
+    const newEvents = currentMatch.events.filter(e => e.id !== eventId);
+    onUpdate({
+      ...currentMatch,
+      events: newEvents,
+      score: calculateCurrentScore(newEvents)
+    });
+  };
+
+  const handleEditEvent = (event: MatchEvent) => {
+    setEditingEvent(event);
+  };
+
+  const saveEditedEvent = (updatedEvent: MatchEvent) => {
+    const currentMatch = matchRef.current;
+    const newEvents = currentMatch.events.map(e => e.id === updatedEvent.id ? updatedEvent : e);
+    onUpdate({
+      ...currentMatch,
+      events: newEvents,
+      score: calculateCurrentScore(newEvents)
+    });
+    setEditingEvent(null);
+  };
+
+  const getEventIcon = (type: EventType) => {
+    switch (type) {
+      case EventType.GOAL: return <Award size={14} className="text-emerald-500" />;
+      case EventType.YELLOW_CARD: return <div className="w-2.5 h-3.5 bg-yellow-400 border border-slate-900 rounded-sm"></div>;
+      case EventType.RED_CARD: return <div className="w-2.5 h-3.5 bg-red-600 border border-slate-900 rounded-sm"></div>;
+      case EventType.BLUE_CARD: return <div className="w-2.5 h-3.5 bg-blue-700 border border-slate-900 rounded-sm"></div>;
+      case EventType.TWO_MINUTES: return <AlertTriangle size={14} className="text-amber-500" />;
+      case EventType.SAVE: return <ShieldCheck size={14} className="text-blue-500" />;
+      case EventType.TIMEOUT: return <Coffee size={14} className="text-slate-400" />;
+      case EventType.MISS: return <XCircle size={14} className="text-orange-500" />;
+      case EventType.LOST_BALL: return <Ban size={14} className="text-slate-500" />;
+      default: return null;
+    }
   };
 
   const renderPersonGrid = (roster: Player[], staff: Player[], team: 'HOME' | 'AWAY') => (
@@ -189,10 +257,9 @@ const MatchConsole: React.FC<MatchConsoleProps> = ({ match, onUpdate, onFinish }
           </button>
         ))}
       </div>
-      
       {staff.length > 0 && (
         <div className="pt-2 border-t border-slate-100">
-          <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-2">Area Tecnica / Staff</label>
+          <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-2">{t.staff}</label>
           <div className="grid grid-cols-2 gap-2">
             {staff.map(member => (
               <button
@@ -220,181 +287,225 @@ const MatchConsole: React.FC<MatchConsoleProps> = ({ match, onUpdate, onFinish }
   );
 
   return (
-    <div className="space-y-4 md:space-y-6 max-w-6xl mx-auto px-1">
-      {/* Timeout Overlay (Invariato) */}
-      {isTimeoutActive && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in duration-300">
-          <div className="max-w-md w-full text-center space-y-8">
-            <div className="space-y-2">
-              <h2 className="text-amber-500 font-black text-2xl uppercase tracking-[0.2em] animate-pulse">Time-out</h2>
-              <h3 className="text-white text-4xl md:text-5xl font-black uppercase tracking-tight">
-                {timeoutTeam === 'HOME' ? match.homeTeamName : match.awayTeamName}
-              </h3>
-            </div>
-            <div className="relative inline-flex items-center justify-center">
-              <div className={`text-9xl font-mono font-black tabular-nums transition-colors ${timeoutSeconds <= 10 ? 'text-red-500 scale-110' : 'text-blue-100'}`}>
-                {timeoutSeconds}
-              </div>
-              <svg className="absolute w-[280px] h-[280px] -rotate-90">
-                <circle cx="140" cy="140" r="130" stroke="currentColor" strokeWidth="8" fill="transparent" className="text-slate-800" />
-                <circle cx="140" cy="140" r="130" stroke="currentColor" strokeWidth="8" fill="transparent" strokeDasharray={816} strokeDashoffset={816 - (816 * timeoutSeconds) / 60} className={`${timeoutSeconds <= 10 ? 'text-red-500' : 'text-blue-600'} transition-all duration-1000 ease-linear`} strokeLinecap="round" />
-              </svg>
-            </div>
-            <div className="pt-8">
-              <button onClick={handleEndTimeout} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-6 rounded-[2rem] font-black text-xl shadow-2xl shadow-blue-500/20 transition-all active:scale-95 flex items-center justify-center gap-4 uppercase tracking-widest">
-                <Play size={24} fill="currentColor" /> Riprendi Gioco
-              </button>
-            </div>
+    <div className="space-y-4 md:space-y-6 max-w-6xl mx-auto px-1 md:px-4">
+      {/* Scoreboard */}
+      <div className={`rounded-2xl md:rounded-3xl p-3 md:p-8 shadow-lg relative overflow-hidden transition-all duration-500 ${timeIsUp ? 'bg-red-600 scale-[0.98]' : 'bg-slate-900'} text-white`}>
+        {isTimeoutActive && (
+          <div className="absolute inset-0 bg-blue-600/95 flex flex-col items-center justify-center z-[50] animate-in fade-in zoom-in-95 duration-300">
+            <Coffee size={48} className="text-white mb-2 animate-bounce" />
+            <h2 className="text-xl md:text-2xl font-black uppercase tracking-widest text-center px-4">
+              TIME-OUT {timeoutTeam === 'HOME' ? match.homeTeamName : match.awayTeamName}
+            </h2>
+            <div className="text-6xl font-mono font-black mt-4">{timeoutSeconds}s</div>
+            <button onClick={() => setIsTimeoutActive(false)} className="mt-6 px-8 py-2 bg-white text-blue-600 rounded-xl font-black uppercase tracking-widest text-xs">Riprendi</button>
           </div>
-        </div>
-      )}
-
-      {/* Scoreboard (Invariato) */}
-      <div className={`rounded-2xl md:rounded-3xl p-4 md:p-8 shadow-lg relative overflow-hidden transition-all duration-500 ${timeIsUp ? 'bg-red-600 scale-[0.98]' : 'bg-slate-900'} text-white`}>
+        )}
         <div className={`absolute top-0 left-0 w-full h-1 ${timeIsUp ? 'bg-white animate-pulse' : 'bg-blue-500'}`}></div>
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4 md:gap-8 relative z-10">
-          <div className="text-center flex-1 order-2 md:order-1 w-full md:w-auto flex flex-row md:flex-col items-center justify-around md:justify-center">
-            <div className="flex flex-col items-center gap-2">
-              <h2 className="text-lg md:text-2xl font-black uppercase tracking-tight text-blue-400 truncate max-w-[120px] md:max-w-none">{match.homeTeamName}</h2>
-              <button onClick={() => handleStartTimeout('HOME')} className="hidden md:flex items-center gap-1.5 px-3 py-1 bg-blue-600/20 border border-blue-500/30 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-blue-600/40 transition-all active:scale-95"><Coffee size={12} /> Time-out</button>
-            </div>
-            <div className="text-5xl md:text-7xl font-black">{match.score.home}</div>
-          </div>
-
-          <div className="text-center flex flex-col items-center order-1 md:order-2 px-4 py-3 md:py-4 bg-slate-800/80 rounded-2xl border border-slate-700 shadow-inner w-full md:min-w-[340px] backdrop-blur-md">
-            <div className="flex items-center justify-between w-full mb-1">
-               <div className="flex items-center gap-2 text-slate-400">
-                  <span className="text-[8px] font-black bg-blue-600 text-white px-2 py-0.5 rounded uppercase tracking-widest">{currentPeriod}° T</span>
-                  {!isEditingTime && <button onClick={handleEditTime} className="p-1 hover:text-white transition-colors"><Pencil size={12} /></button>}
-               </div>
-               <button onClick={() => setIsEditingSettings(!isEditingSettings)} className={`p-1 transition-colors ${isEditingSettings ? 'text-blue-400' : 'text-slate-400 hover:text-white'}`}><Settings2 size={16} /></button>
+        
+        <div className="flex flex-col md:flex-row justify-between items-center gap-3 md:gap-8 relative z-10">
+          {/* HOME TEAM */}
+          <div className="flex justify-between items-center w-full md:w-auto md:flex-col md:flex-1 md:order-1">
+            <div className="flex flex-col items-start md:items-center gap-1">
+              <div className="flex items-center gap-2">
+                {match.homeLogo && <img src={match.homeLogo} alt="" className="w-8 h-8 md:w-12 md:h-12 object-contain bg-white/10 rounded-lg p-1" />}
+                <h2 className="text-sm md:text-2xl font-black uppercase tracking-tight text-blue-400 truncate max-w-[120px] md:max-w-none">{match.homeTeamName}</h2>
+              </div>
+              <button onClick={() => handleStartTimeout('HOME')} className="flex items-center gap-1 px-2 py-0.5 bg-blue-600/20 border border-blue-500/30 rounded text-[8px] md:text-[10px] font-black uppercase tracking-widest hover:bg-blue-600/40 transition-all"><Coffee size={10} className="md:w-3 md:h-3" /> {t.timeout}</button>
             </div>
             
-            {isEditingSettings ? (
-              <div className="w-full space-y-4 animate-in zoom-in-95 duration-200">
-                <div className="grid grid-cols-4 gap-1">
-                  {[1,2,3,4].map(p => (
-                    <button key={p} onClick={() => { setCurrentPeriod(p); setSeconds(0); setIsActive(false); }} className={`py-1 rounded text-[9px] font-black border ${currentPeriod === p ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-700 border-slate-600 text-slate-400'}`}>{p}°T</button>
-                  ))}
-                </div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {[30, 25, 20, 15, 10, 5].map(mins => (
-                    <button key={mins} onClick={() => handlePresetDuration(mins)} className={`py-1.5 rounded-lg border text-[10px] font-black transition-all active:scale-95 ${periodDurations[currentPeriod] === mins * 60 ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-500'}`}>{mins}'</button>
-                  ))}
-                </div>
-                <button onClick={() => setIsEditingSettings(false)} className="w-full py-2 bg-slate-700 hover:bg-slate-600 text-white text-[9px] font-black rounded uppercase tracking-widest transition-colors border border-slate-600">CHIUDI</button>
-              </div>
-            ) : isEditingTime ? (
-              <div className="flex flex-col items-center gap-3 py-1 animate-in slide-in-from-top-1 w-full">
-                <div className="flex items-center gap-2">
-                  <div className="flex flex-col items-center gap-1">
-                    <button onClick={() => adjustCurrentEditTime(60)} className="p-1 hover:text-blue-400 transition-colors"><Plus size={14}/></button>
-                    <input type="number" className="w-14 bg-slate-700 border-none rounded-lg text-2xl font-mono font-bold text-center text-blue-100 p-1" value={editMins} onChange={(e) => setEditMins(e.target.value)} />
-                    <button onClick={() => adjustCurrentEditTime(-60)} className="p-1 hover:text-blue-400 transition-colors"><Minus size={14}/></button>
-                  </div>
-                  <span className="text-xl font-bold">:</span>
-                  <div className="flex flex-col items-center gap-1">
-                    <button onClick={() => adjustCurrentEditTime(1)} className="p-1 hover:text-blue-400 transition-colors"><Plus size={14}/></button>
-                    <input type="number" className="w-14 bg-slate-700 border-none rounded-lg text-2xl font-mono font-bold text-center text-blue-100 p-1" value={editSecs} onChange={(e) => setEditSecs(e.target.value)} />
-                    <button onClick={() => adjustCurrentEditTime(-1)} className="p-1 hover:text-blue-400 transition-colors"><Minus size={14}/></button>
-                  </div>
-                </div>
-                <div className="flex gap-2 w-full">
-                  <button onClick={saveEditedTime} className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white py-2 rounded-lg flex items-center justify-center gap-1 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95"><Check size={14} /> Salva</button>
-                  <button onClick={() => setIsEditingTime(false)} className="flex-1 bg-slate-600 hover:bg-slate-500 text-white py-2 rounded-lg flex items-center justify-center gap-1 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95"><X size={14} /> Esci</button>
-                </div>
-              </div>
-            ) : (
+            <div className="flex flex-col items-center">
+              <button onClick={() => manualScoreAdjustment('HOME', 1)} className="p-1 text-blue-400/50 hover:text-blue-400 transition-colors"><ChevronUp size={24} /></button>
+              <div className="text-4xl md:text-7xl font-black">{match.score.home}</div>
+              <button onClick={() => manualScoreAdjustment('HOME', -1)} className="p-1 text-blue-400/50 hover:text-blue-400 transition-colors"><ChevronDown size={24} /></button>
+            </div>
+          </div>
+
+          {/* TIMER CENTRAL */}
+          <div className="text-center flex flex-col items-center order-first md:order-2 px-3 py-2 md:py-4 bg-slate-800/80 rounded-xl md:rounded-2xl border border-slate-700 shadow-inner w-full md:min-w-[320px] backdrop-blur-md">
+            <div className="flex items-center justify-between w-full mb-1">
+               <div className="flex items-center gap-2 text-slate-400">
+                  <span className="text-[8px] md:text-[9px] font-black bg-blue-600 text-white px-2 py-0.5 rounded uppercase tracking-widest">{currentPeriod}° T</span>
+                  {!isEditingTime && <button onClick={handleEditTime} className="p-1 hover:text-white"><Pencil size={12} /></button>}
+               </div>
+               <button onClick={() => setIsEditingSettings(!isEditingSettings)} className={`p-1 ${isEditingSettings ? 'text-blue-400' : 'text-slate-400 hover:text-white'}`}><Settings2 size={16} /></button>
+            </div>
+            
+            {!isEditingSettings && !isEditingTime && (
               <>
-                <button onClick={handleEditTime} className={`text-5xl md:text-6xl font-mono font-black tracking-tighter transition-colors hover:text-blue-400 cursor-pointer ${timeIsUp ? 'text-white' : 'text-blue-100'}`}>{formatTime(seconds)}</button>
-                <div className="flex items-center gap-2 md:gap-4 mt-3 md:mt-4 w-full justify-center">
-                  <button onClick={() => { setIsActive(!isActive); setTimeIsUp(false); }} className={`flex items-center justify-center gap-2 flex-1 py-3 md:py-3.5 rounded-xl font-black transition-all shadow-lg text-[11px] md:text-sm tracking-widest ${isActive ? 'bg-red-500 shadow-red-500/20 active:scale-95' : 'bg-emerald-500 shadow-emerald-500/20 active:scale-105'}`}>{isActive ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}{isActive ? 'STOP' : 'START'}</button>
-                  <button onClick={() => { if(confirm('Azzerare?')) setSeconds(0); }} className="p-3 text-slate-400 hover:text-white bg-slate-700/50 rounded-xl transition-all active:rotate-180"><RotateCcw size={18} /></button>
+                <div className="flex items-center gap-4 md:gap-6">
+                   <button onClick={() => { setSeconds(Math.max(0, seconds - 1)); syncTimeWithParent(Math.max(0, seconds - 1), currentPeriod); }} className="p-1.5 md:p-2 text-slate-500 hover:text-white bg-white/5 rounded-lg text-[9px] font-bold border border-white/5 transition-all">-1s</button>
+                   <button onClick={handleEditTime} className={`text-4xl md:text-6xl font-mono font-black tracking-tighter ${timeIsUp ? 'text-white' : 'text-blue-100'}`}>{formatTime(seconds)}</button>
+                   <button onClick={() => { setSeconds(Math.min(targetSeconds, seconds + 1)); syncTimeWithParent(Math.min(targetSeconds, seconds + 1), currentPeriod); }} className="p-1.5 md:p-2 text-slate-500 hover:text-white bg-white/5 rounded-lg text-[9px] font-bold border border-white/5 transition-all">+1s</button>
+                </div>
+                <div className="flex items-center gap-2 md:gap-4 mt-2 md:mt-4 w-full">
+                  <button onClick={() => { setIsActive(!isActive); setTimeIsUp(false); }} className={`flex items-center justify-center gap-2 flex-1 py-2.5 md:py-3.5 rounded-xl font-black transition-all shadow-lg text-[10px] md:text-sm tracking-widest ${isActive ? 'bg-red-500 shadow-red-500/20' : 'bg-emerald-500 shadow-emerald-500/20'}`}>
+                    {isActive ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
+                    {isActive ? 'STOP' : 'START'}
+                  </button>
+                  <button onClick={() => { if(confirm(t.confirmResetTimer)) setSeconds(0); }} className="p-2.5 text-slate-400 hover:text-white bg-slate-700/50 rounded-xl"><RotateCcw size={16} /></button>
                 </div>
               </>
             )}
+            
+            {isEditingTime && (
+              <div className="flex flex-col items-center gap-2 py-1 w-full animate-in zoom-in-95">
+                <div className="flex items-center gap-3">
+                  <input type="number" className="w-14 bg-slate-700 rounded-lg text-2xl font-mono font-bold text-center text-blue-100 p-2 border-none" value={editMins} onChange={e => setEditMins(e.target.value)} />
+                  <span className="text-xl font-bold">:</span>
+                  <input type="number" className="w-14 bg-slate-700 rounded-lg text-2xl font-mono font-bold text-center text-blue-100 p-2 border-none" value={editSecs} onChange={e => setEditSecs(e.target.value)} />
+                </div>
+                <div className="flex gap-2 w-full mt-2">
+                  <button onClick={saveEditedTime} className="flex-1 bg-emerald-500 text-white py-2 rounded-xl text-[10px] font-black uppercase">OK</button>
+                  <button onClick={() => setIsEditingTime(false)} className="flex-1 bg-slate-600 text-white py-2 rounded-xl text-[10px] font-black uppercase">ANNULLA</button>
+                </div>
+              </div>
+            )}
+
+            {isEditingSettings && (
+               <div className="w-full space-y-3 mt-4 animate-in fade-in">
+                  <div className="grid grid-cols-4 gap-1">
+                    {[1,2,3,4].map(p => (
+                      <button key={p} onClick={() => { setCurrentPeriod(p); setSeconds(0); setIsEditingSettings(false); syncTimeWithParent(0, p); }} className={`py-1 rounded text-[10px] font-black ${currentPeriod === p ? 'bg-blue-600' : 'bg-slate-700 text-slate-400'}`}>{p}°T</button>
+                    ))}
+                  </div>
+                  <button onClick={() => setIsEditingSettings(false)} className="w-full py-2 bg-slate-700 text-white text-[10px] font-black rounded uppercase">CHIUDI</button>
+               </div>
+            )}
           </div>
 
-          <div className="text-center flex-1 order-3 w-full md:w-auto flex flex-row md:flex-col items-center justify-around md:justify-center">
-             <div className="text-5xl md:text-7xl font-black">{match.score.away}</div>
-             <div className="flex flex-col items-center gap-2">
-              <h2 className="text-lg md:text-2xl font-black uppercase tracking-tight text-red-400 truncate max-w-[120px] md:max-w-none">{match.awayTeamName}</h2>
-              <button onClick={() => handleStartTimeout('AWAY')} className="hidden md:flex items-center gap-1.5 px-3 py-1 bg-red-600/20 border border-red-500/30 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red-600/40 transition-all active:scale-95"><Coffee size={12} /> Time-out</button>
+          {/* AWAY TEAM */}
+          <div className="flex justify-between items-center w-full md:w-auto md:flex-col md:flex-1 md:order-3">
+            <div className="flex flex-col items-center">
+              <button onClick={() => manualScoreAdjustment('AWAY', 1)} className="p-1 text-red-400/50 hover:text-red-400 transition-colors"><ChevronUp size={24} /></button>
+              <div className="text-4xl md:text-7xl font-black">{match.score.away}</div>
+              <button onClick={() => manualScoreAdjustment('AWAY', -1)} className="p-1 text-red-400/50 hover:text-red-400 transition-colors"><ChevronDown size={24} /></button>
+            </div>
+
+            <div className="flex flex-col items-end md:items-center gap-1">
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm md:text-2xl font-black uppercase tracking-tight text-red-400 truncate max-w-[120px] md:max-w-none">{match.awayTeamName}</h2>
+                {match.awayLogo && <img src={match.awayLogo} alt="" className="w-8 h-8 md:w-12 md:h-12 object-contain bg-white/10 rounded-lg p-1" />}
+              </div>
+              <button onClick={() => handleStartTimeout('AWAY')} className="flex items-center gap-1 px-2 py-0.5 bg-red-600/20 border border-red-500/30 rounded text-[8px] md:text-[10px] font-black uppercase tracking-widest hover:bg-red-600/40 transition-all"><Coffee size={10} className="md:w-3 md:h-3" /> {t.timeout}</button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Action Area */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-6">
-        <div className="lg:col-span-4 bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-y-auto max-h-[500px] custom-scrollbar">
-          <h3 className="font-black text-[10px] text-blue-600 mb-3 uppercase tracking-widest flex items-center gap-2">
+      {/* Main Console Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* Roster HOME */}
+        <div className="lg:col-span-3 bg-white p-3 md:p-6 rounded-2xl shadow-sm border border-slate-100 max-h-[400px] md:max-h-[600px] overflow-y-auto custom-scrollbar">
+          <h3 className="font-black text-[9px] text-blue-600 mb-3 uppercase tracking-widest flex items-center gap-2">
             <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div> {match.homeTeamName}
           </h3>
           {renderPersonGrid(match.homeRoster, match.homeStaff, 'HOME')}
         </div>
 
-        <div className="lg:col-span-4 space-y-4">
-          <div className={`bg-white p-5 rounded-2xl shadow-lg border-2 transition-all sticky top-[80px] z-20 ${selectedPerson ? 'border-blue-500 ring-4 ring-blue-50' : 'border-slate-100 opacity-80'}`}>
-            <h3 className="text-center font-black text-slate-500 mb-4 uppercase tracking-widest text-[10px] truncate">
-              {selectedPerson ? `${selectedPerson.person.lastName} ${selectedPerson.isStaff ? `(${selectedPerson.person.role})` : ''}` : 'Seleziona Persona'}
-            </h3>
+        {/* Central Controls */}
+        <div className="lg:col-span-6 space-y-4">
+          <div className={`bg-white p-4 md:p-6 rounded-2xl shadow-xl border-2 transition-all md:sticky md:top-[80px] z-30 ${selectedPerson ? 'border-blue-500 ring-4 ring-blue-50' : 'border-slate-100 opacity-90'}`}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-black text-slate-500 uppercase tracking-widest text-[9px] truncate max-w-[180px]">
+                {selectedPerson ? `${selectedPerson.person.lastName} ${selectedPerson.isStaff ? `(${selectedPerson.person.role})` : ''}` : 'Seleziona dalla lista'}
+              </h3>
+              {selectedPerson && <button onClick={() => setSelectedPerson(null)} className="p-1 bg-slate-100 rounded-full text-slate-400"><X size={12} /></button>}
+            </div>
             
-            <div className="grid grid-cols-2 gap-3">
-              <button disabled={!selectedPerson || selectedPerson.isStaff} onClick={() => addEvent(EventType.GOAL)} className="flex flex-col items-center justify-center p-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl shadow-md transition-all disabled:opacity-20 active:scale-95">
-                <Award size={24} /><span className="font-black mt-1 text-[10px]">GOL</span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-3 gap-2">
+              <button disabled={!selectedPerson || selectedPerson.isStaff} onClick={() => addEvent(EventType.GOAL)} className="flex flex-col items-center justify-center p-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-md transition-all disabled:opacity-20 active:scale-95">
+                <Award size={20} /><span className="font-black mt-1 text-[9px] uppercase">{t.goal}</span>
               </button>
-              <button disabled={!selectedPerson} onClick={() => addEvent(EventType.TWO_MINUTES)} className="flex flex-col items-center justify-center p-4 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl shadow-md transition-all disabled:opacity-20 active:scale-95">
-                <AlertTriangle size={24} /><span className="font-black mt-1 text-[10px]">2 MINUTI</span>
+              <button disabled={!selectedPerson || selectedPerson.isStaff} onClick={() => addEvent(EventType.SAVE)} className="flex flex-col items-center justify-center p-3 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100 transition-all disabled:opacity-20 active:scale-95">
+                <ShieldCheck size={20} /><span className="font-black mt-1 text-[9px] uppercase">{t.save}</span>
               </button>
-              <button disabled={!selectedPerson} onClick={() => addEvent(EventType.YELLOW_CARD)} className="flex flex-col items-center justify-center p-3 bg-yellow-400 text-slate-900 rounded-2xl shadow-sm transition-all disabled:opacity-20 active:scale-95">
-                <div className="w-4 h-6 bg-yellow-400 border-2 border-slate-800 rounded-sm"></div><span className="font-black mt-1 text-[10px]">GIALLO</span>
+              <button disabled={!selectedPerson || selectedPerson.isStaff} onClick={() => addEvent(EventType.MISS)} className="flex flex-col items-center justify-center p-3 bg-orange-50 text-orange-700 rounded-xl border border-orange-100 transition-all disabled:opacity-20 active:scale-95">
+                <Target size={20} /><span className="font-black mt-1 text-[9px] uppercase">{t.miss}</span>
               </button>
-              <button disabled={!selectedPerson} onClick={() => addEvent(EventType.RED_CARD)} className="flex flex-col items-center justify-center p-3 bg-red-600 text-white rounded-2xl shadow-sm transition-all disabled:opacity-20 active:scale-95">
-                <div className="w-4 h-6 bg-red-600 border-2 border-white rounded-sm"></div><span className="font-black mt-1 text-[10px]">ROSSO</span>
+              <button disabled={!selectedPerson || selectedPerson.isStaff} onClick={() => addEvent(EventType.LOST_BALL)} className="flex flex-col items-center justify-center p-3 bg-slate-50 text-slate-700 rounded-xl border border-slate-100 transition-all disabled:opacity-20 active:scale-95">
+                <Ban size={20} /><span className="font-black mt-1 text-[9px] uppercase">{t.lostBall}</span>
               </button>
-              <button disabled={!selectedPerson} onClick={() => addEvent(EventType.BLUE_CARD)} className="flex flex-col items-center justify-center p-3 bg-blue-800 text-white rounded-2xl shadow-sm transition-all disabled:opacity-20 active:scale-95">
-                <div className="w-4 h-6 bg-blue-600 border-2 border-white rounded-sm"></div><span className="font-black mt-1 text-[10px]">BLU</span>
+              <button disabled={!selectedPerson} onClick={() => addEvent(EventType.TWO_MINUTES)} className="flex flex-col items-center justify-center p-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl shadow-md transition-all disabled:opacity-20 active:scale-95">
+                <AlertTriangle size={20} /><span className="font-black mt-1 text-[9px] uppercase">{t.twoMinutes}</span>
               </button>
-              <button disabled={!selectedPerson || selectedPerson.isStaff} onClick={() => addEvent(EventType.SAVE)} className="flex flex-col items-center justify-center p-3 bg-emerald-50 text-emerald-700 rounded-2xl transition-all disabled:opacity-20 active:scale-95 border border-emerald-100">
-                <ShieldCheck size={20} /><span className="font-black mt-1 text-[10px]">PARATA</span>
+              <button disabled={!selectedPerson} onClick={() => addEvent(EventType.YELLOW_CARD)} className="flex flex-col items-center justify-center p-3 bg-yellow-400 text-slate-900 rounded-xl transition-all disabled:opacity-20 active:scale-95">
+                <div className="w-3 h-5 bg-yellow-400 border-2 border-slate-800 rounded-sm"></div><span className="font-black mt-1 text-[9px] uppercase">{t.yellowCard}</span>
+              </button>
+              <button disabled={!selectedPerson} onClick={() => addEvent(EventType.RED_CARD)} className="flex flex-col items-center justify-center p-3 bg-red-600 text-white rounded-xl transition-all disabled:opacity-20 active:scale-95">
+                <div className="w-3 h-5 bg-red-600 border-2 border-white rounded-sm"></div><span className="font-black mt-1 text-[9px] uppercase">{t.redCard}</span>
+              </button>
+              <button disabled={!selectedPerson} onClick={() => addEvent(EventType.BLUE_CARD)} className="flex flex-col items-center justify-center p-3 bg-blue-800 text-white rounded-xl transition-all disabled:opacity-20 active:scale-95">
+                <div className="w-3 h-5 bg-blue-600 border-2 border-white rounded-sm"></div><span className="font-black mt-1 text-[9px] uppercase">{t.blueCard}</span>
               </button>
             </div>
-            {selectedPerson?.isStaff && (
-              <p className="mt-3 text-[8px] font-black text-amber-600 bg-amber-50 p-2 rounded text-center uppercase">Lo staff non può segnare gol o parate</p>
-            )}
+            
+            <button onClick={onFinish} className="w-full mt-4 bg-slate-900 text-white py-3 rounded-xl font-black shadow-lg transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-[10px] active:scale-95">
+              {t.finish}
+            </button>
           </div>
 
-          <button onClick={onFinish} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black shadow-lg transition-all flex items-center justify-center gap-2 uppercase tracking-widest text-xs active:scale-95">
-            TERMINA E GENERA REFERTO AI
-          </button>
+          {/* Modal Modifica Evento */}
+          {editingEvent && (
+             <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                <div className="bg-white rounded-3xl w-full max-w-sm p-6 space-y-6 shadow-2xl animate-in zoom-in-95">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-black uppercase tracking-widest text-xs">Modifica Evento</h3>
+                    <button onClick={() => setEditingEvent(null)} className="text-slate-400"><X size={20} /></button>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Tipo Azione</label>
+                      <select 
+                        className="w-full p-3 bg-slate-50 border rounded-xl font-bold text-sm"
+                        value={editingEvent.type}
+                        onChange={e => setEditingEvent({...editingEvent, type: e.target.value as EventType})}
+                      >
+                        {Object.values(EventType).map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <button 
+                      onClick={() => saveEditedEvent(editingEvent)}
+                      className="w-full bg-blue-600 text-white py-3 rounded-xl font-black uppercase tracking-widest text-[10px]"
+                    >
+                      Salva Modifiche
+                    </button>
+                  </div>
+                </div>
+             </div>
+          )}
+
+          {/* Cronaca Live Feed */}
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-black text-slate-400 uppercase tracking-widest text-[9px] flex items-center gap-2"><Clock size={12} /> Cronaca Live</h3>
+              <span className="text-[9px] font-black text-slate-300 uppercase">{match.events.length} Azioni</span>
+            </div>
+            <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar pr-1">
+              {[...match.events].reverse().map((event) => (
+                <div key={event.id} className={`flex items-center justify-between p-2.5 rounded-xl border transition-all ${event.team === 'HOME' ? 'bg-blue-50/30 border-blue-100' : 'bg-red-50/30 border-red-100'}`}>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="font-mono text-slate-500 font-bold text-[8px] shrink-0 w-8">{event.gameTime.split(' - ')[1]}</span>
+                    <div className="shrink-0">{getEventIcon(event.type)}</div>
+                    <div className="min-w-0 flex flex-col">
+                      <span className={`text-[10px] font-black uppercase truncate ${event.team === 'HOME' ? 'text-blue-900' : 'text-red-900'}`}>{event.playerName}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => handleEditEvent(event)} className="p-1.5 text-slate-300 hover:text-blue-500 transition-colors"><Pencil size={12} /></button>
+                    <button onClick={() => deleteEvent(event.id)} className="p-1.5 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={12} /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
-        <div className="lg:col-span-4 bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100 overflow-y-auto max-h-[500px] custom-scrollbar">
-          <h3 className="font-black text-[10px] text-red-600 mb-3 uppercase tracking-widest flex items-center gap-2">
+        {/* Roster AWAY */}
+        <div className="lg:col-span-3 bg-white p-3 md:p-6 rounded-2xl shadow-sm border border-slate-100 max-h-[400px] md:max-h-[600px] overflow-y-auto custom-scrollbar">
+          <h3 className="font-black text-[9px] text-red-600 mb-3 uppercase tracking-widest flex items-center gap-2">
             <div className="w-1.5 h-1.5 bg-red-600 rounded-full"></div> {match.awayTeamName}
           </h3>
           {renderPersonGrid(match.awayRoster, match.awayStaff, 'AWAY')}
-        </div>
-      </div>
-
-      {/* Log (Invariato) */}
-      <div className="bg-white rounded-2xl p-4 md:p-6 shadow-sm border border-slate-100">
-        <h3 className="font-black text-slate-400 mb-4 uppercase tracking-widest text-[10px]">Eventi Recenti</h3>
-        <div className="space-y-1.5 max-h-40 overflow-y-auto custom-scrollbar">
-          {[...match.events].reverse().slice(0, 15).map((event) => (
-            <div key={event.id} className="flex items-center justify-between p-2 bg-slate-50/50 rounded-xl border border-slate-100/50">
-              <div className="flex items-center gap-3 min-w-0">
-                <span className="font-mono text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded text-[9px]">{event.gameTime.split(' - ')[1]}</span>
-                <span className={`text-[11px] font-black truncate max-w-[120px] ${event.team === 'HOME' ? 'text-blue-700' : 'text-red-700'}`}>
-                  {event.playerName}
-                </span>
-                <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded ${event.type === EventType.BLUE_CARD ? 'bg-blue-600 text-white' : 'text-slate-400'}`}>
-                  {event.type.replace('_', ' ')}
-                </span>
-              </div>
-            </div>
-          ))}
         </div>
       </div>
     </div>

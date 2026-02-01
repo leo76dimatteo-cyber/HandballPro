@@ -7,7 +7,19 @@ export enum EventType {
   TWO_MINUTES = 'TWO_MINUTES',
   MISS = 'MISS',
   SAVE = 'SAVE',
-  TIMEOUT = 'TIMEOUT'
+  TIMEOUT = 'TIMEOUT',
+  LOST_BALL = 'LOST_BALL'
+}
+
+export enum HandballRole {
+  PORTIERE = 'Portiere',
+  PIVOT = 'Pivot',
+  CENTRALE = 'Centrale',
+  TERZINO_DESTRO = 'Terzino Destro',
+  TERZINO_SINISTRO = 'Terzino Sinistro',
+  ALA_DESTRA = 'Ala Destra',
+  ALA_SINISTRA = 'Ala Sinistra',
+  ND = 'N.D.'
 }
 
 export enum UserRole {
@@ -16,6 +28,8 @@ export enum UserRole {
   GUEST = 'GUEST'
 }
 
+export type Language = 'it' | 'en' | 'fr' | 'de' | 'es';
+
 export interface UserProfile {
   id: string;
   firstName: string;
@@ -23,6 +37,7 @@ export interface UserProfile {
   society: string;
   role: UserRole;
   pin?: string;
+  language?: Language;
 }
 
 export interface Player {
@@ -39,6 +54,7 @@ export interface TeamProfile {
   assistantCoachName?: string;
   category: string;
   players: Player[];
+  logo?: string; // Base64 string o URL
 }
 
 export interface MatchEvent {
@@ -59,6 +75,8 @@ export interface Match {
   category: string;
   homeTeamName: string;
   awayTeamName: string;
+  homeLogo?: string;
+  awayLogo?: string;
   homeCoach?: string;
   awayCoach?: string;
   homeAssistantCoach?: string;
@@ -69,6 +87,8 @@ export interface Match {
   awayStaff: Player[];
   events: MatchEvent[];
   isFinished: boolean;
+  currentTime?: number; 
+  currentPeriod?: number; 
   score: {
     home: number;
     away: number;
@@ -82,4 +102,21 @@ export interface ScheduledMatch {
   homeTeam: string;
   awayTeam: string;
   category: string;
+}
+
+export interface TrainingEvaluation {
+  playerId: string;
+  playerName: string;
+  isPresent: boolean;
+  role: HandballRole | string;
+  rating: number; // 1-5 stars
+  notes: string;
+}
+
+export interface TrainingSession {
+  id: string;
+  date: string;
+  category: string;
+  evaluations: TrainingEvaluation[];
+  summary?: string;
 }

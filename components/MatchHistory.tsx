@@ -1,7 +1,8 @@
 
 import React from 'react';
 import { Match } from '../types';
-import { Calendar, Trash2, Eye, Lock } from 'lucide-react';
+import { storage } from '../services/storageService';
+import { Calendar, Trash2, Eye, Lock, Share2, FileJson } from 'lucide-react';
 
 interface MatchHistoryProps {
   matches: Match[];
@@ -12,6 +13,14 @@ interface MatchHistoryProps {
 }
 
 const MatchHistory: React.FC<MatchHistoryProps> = ({ matches, onView, onDelete, onBack, canDelete = false }) => {
+  const handleExport = () => {
+    if (matches.length === 0) {
+      alert("Nessun match in archivio da esportare.");
+      return;
+    }
+    storage.exportData(matches, 'HPro_ArchivioMatch');
+  };
+
   return (
     <div className="max-w-5xl mx-auto py-6 md:py-8 px-2 md:px-6 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 md:mb-12 bg-white p-6 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border border-slate-100 shadow-sm">
@@ -24,7 +33,13 @@ const MatchHistory: React.FC<MatchHistoryProps> = ({ matches, onView, onDelete, 
           </h2>
           <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] mt-1">Storico cronologico referti</p>
         </div>
-        <div className="flex items-center justify-center gap-4">
+        <div className="flex items-center justify-center gap-3">
+           <button 
+             onClick={handleExport}
+             className="bg-white border border-slate-200 text-slate-600 hover:border-emerald-400 hover:text-emerald-600 px-5 py-3 rounded-xl font-black flex items-center gap-2 transition-all active:scale-95 text-xs uppercase tracking-widest"
+           >
+             <Share2 size={16} /> Esporta Archivio
+           </button>
            <div className="bg-slate-50 border border-slate-100 px-4 py-2 rounded-xl flex items-center gap-3">
               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Totale</span>
               <span className="text-xl font-black text-slate-900">{matches.length}</span>

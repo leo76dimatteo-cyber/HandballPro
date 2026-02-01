@@ -1,98 +1,174 @@
 
-import React, { useState, useEffect } from 'react';
-import { Match, Player, TeamProfile, UserRole, ScheduledMatch, UserProfile } from './types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Match, Player, TeamProfile, UserRole, ScheduledMatch, UserProfile, Language, TrainingSession } from './types';
 import { storage } from './services/storageService';
+import { translations } from './translations';
 import RosterSetup from './components/RosterSetup';
 import MatchConsole from './components/MatchConsole';
 import FinalReport from './components/FinalReport';
-import TeamRegistry from './components/TeamRegistry';
 import MatchHistory from './components/MatchHistory';
 import CalendarManager from './components/CalendarManager';
 import Settings from './components/Settings';
-import { Trophy, Plus, ClipboardList, ArrowLeft, Settings2, UserCircle, Home, LayoutGrid, Database, Activity, X, History as HistoryIcon, Layers, UserCheck, ShieldAlert, Eye, Calendar as CalendarIcon, UserCog, UserPlus, Check, Star, Settings as SettingsIcon, MapPin, Info } from 'lucide-react';
+import TrainingManager from './components/TrainingManager';
+import { Trophy, Plus, ClipboardList, ArrowLeft, Settings2, UserCircle, Home, LayoutGrid, Database, Activity, X, History as HistoryIcon, Layers, UserCheck, ShieldAlert, Eye, Calendar as CalendarIcon, UserCog, UserPlus, Check, Star, Settings as SettingsIcon, MapPin, Info, Languages, AlertTriangle, TrendingUp, Target, BarChart3, Shield, Zap, Clock, ChevronRight, Image as ImageIcon, CheckCircle2, Dumbbell, Link as LinkIcon, UserPlus as InviteIcon } from 'lucide-react';
 
-type AppState = 'HOME' | 'SETUP' | 'LIVE' | 'REPORT' | 'REGISTRY' | 'HISTORY' | 'CALENDAR' | 'SETTINGS';
+type AppState = 'HOME' | 'SETUP' | 'LIVE' | 'REPORT' | 'HISTORY' | 'CALENDAR' | 'SETTINGS' | 'TRAINING';
+
+interface Toast {
+  message: string;
+  type: 'success' | 'error';
+}
+
+interface InviteData {
+  role: UserRole;
+  society: string;
+  inviter: string;
+}
 
 const SUGGESTED_CATEGORIES = [
   "Serie A Gold", "Serie A Silver", "Serie A1 F", "Serie A2", "Serie B", 
   "Under 20", "Under 17", "Under 15", "Under 13", "Amichevole"
 ];
 
-const STAFF_ROLES = [
-  "1° Allenatore", 
-  "2° Allenatore", 
-  "Ufficiale A", 
-  "Ufficiale B", 
-  "Ufficiale C", 
-  "Ufficiale D", 
-  "Medico", 
-  "Fisioterapista"
-];
-
 const App: React.FC = () => {
   const [view, setView] = useState<AppState>('HOME');
+  const [lang, setLang] = useState<Language>(() => storage.getLanguage());
+  const t = translations[lang] || translations['it'];
   
-  // States from Storage Service
   const [currentUser, setCurrentUser] = useState<UserProfile>(() => storage.getUser());
   const [pastMatches, setPastMatches] = useState<Match[]>(() => storage.getMatches());
   const [calendarMatches, setCalendarMatches] = useState<ScheduledMatch[]>(() => storage.getCalendar());
-  const [myTeamProfile, setMyTeamProfile] = useState<TeamProfile>(() => storage.getRegistry());
+  const [allRegistries, setAllRegistries] = useState<TeamProfile[]>(() => storage.getAllRegistries());
+  const [toast, setToast] = useState<Toast | null>(null);
+  const [pendingInvite, setPendingInvite] = useState<InviteData | null>(null);
 
-  // Local Temp States
-  const [match, setMatch] = useState<Match | null>(null);
-  const [homeTeam, setHomeTeam] = useState(myTeamProfile.teamName || 'CASA');
-  const [awayTeam, setAwayTeam] = useState('TRASFERTA');
-  const [matchCategory, setMatchCategory] = useState(myTeamProfile.category || 'Serie B');
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  // Gestione Inviti tramite URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const invitePayload = params.get('invite');
+    if (invitePayload) {
+      try {
+        const decoded = JSON.parse(atob(invitePayload)) as InviteData;
+        if (decoded.role && decoded.society) {
+          setPendingInvite(decoded);
+          // Rimuovi il parametro dall'URL per pulizia
+          const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+          window.history.pushState({ path: newUrl }, '', newUrl);
+        }
+      } catch (e) {
+        console.error("Payload invito non valido");
+      }
+    }
+  }, []);
+
+  const handleAcceptInvite = () => {
+    if (pendingInvite) {
+      const updatedUser: UserProfile = {
+        ...currentUser,
+        role: pendingInvite.role,
+        society: pendingInvite.society
+      };
+      storage.setUser(updatedUser);
+      setCurrentUser(updatedUser);
+      setPendingInvite(null);
+      showToast(`Profilo configurato come ${pendingInvite.role} per ${pendingInvite.society}`);
+    }
+  };
+
+  useEffect(() => {
+    const active = storage.getActiveMatch();
+    if (active && !active.isFinished) {
+      setMatch(active);
+      setView('LIVE');
+    }
+  }, []);
+
+  useEffect(() => {
+    setAllRegistries(storage.getAllRegistries());
+  }, [view]);
+
+  const [match, setMatch] = useState<Match | null>(() => storage.getActiveMatch());
+  const [homeTeam, setHomeTeam] = useState('LA MIA SQUADRA');
+  const [awayTeam, setAwayTeam] = useState('AVVERSARI');
+  const [homeLogo, setHomeLogo] = useState<string | undefined>(undefined);
+  const [awayLogo, setAwayLogo] = useState<string | undefined>(undefined);
+  const [matchCategory, setMatchCategory] = useState('');
   const [homeRoster, setHomeRoster] = useState<Player[]>([]);
   const [awayRoster, setAwayRoster] = useState<Player[]>([]);
   const [homeStaff, setHomeStaff] = useState<Player[]>([]);
   const [awayStaff, setAwayStaff] = useState<Player[]>([]);
 
-  // Staff Form state
-  const [showStaffForm, setShowStaffForm] = useState<'HOME' | 'AWAY' | null>(null);
-  const [tempStaff, setTempStaff] = useState({ firstName: '', lastName: '', role: '1° Allenatore' });
-
-  // Sync Registry when it changes
   useEffect(() => {
-    storage.setRegistry(myTeamProfile);
-    if (!homeTeam || homeTeam === 'CASA') setHomeTeam(myTeamProfile.teamName || 'CASA');
-    if (!matchCategory) setMatchCategory(myTeamProfile.category || 'Serie B');
-  }, [myTeamProfile]);
+    if (view === 'SETUP' && matchCategory) {
+      const registry = storage.getRegistryByCategory(matchCategory);
+      if (registry && (homeTeam === 'LA MIA SQUADRA' || !homeTeam)) {
+        setHomeTeam(registry.teamName);
+        setHomeLogo(registry.logo);
+      }
+    }
+  }, [matchCategory, view]);
 
-  // Sync Calendar
-  useEffect(() => {
-    storage.setCalendar(calendarMatches);
-  }, [calendarMatches]);
+  const dashboardStats = useMemo(() => {
+    if (pastMatches.length === 0 || allRegistries.length === 0) return null;
+    const myTeamNames = new Set(allRegistries.map(r => r.teamName.toUpperCase()));
+    let wins = 0; let losses = 0; let draws = 0;
+    const lastResults: ('W' | 'L' | 'D')[] = [];
+
+    pastMatches.forEach(m => {
+      const isHome = myTeamNames.has(m.homeTeamName.toUpperCase());
+      const isAway = myTeamNames.has(m.awayTeamName.toUpperCase());
+      if (!isHome && !isAway) return;
+      const myScore = isHome ? m.score.home : m.score.away;
+      const oppScore = isHome ? m.score.away : m.homeTeamName;
+      let res: 'W' | 'L' | 'D' = 'D';
+      if (myScore > oppScore) { wins++; res = 'W'; }
+      else if (myScore < oppScore) { losses++; res = 'L'; }
+      else { draws++; res = 'D'; }
+      if (lastResults.length < 5) lastResults.push(res);
+    });
+
+    const total = wins + losses + draws;
+    return {
+      total, wins, losses, draws,
+      winRate: total > 0 ? Math.round((wins / total) * 100) : 0,
+      lastResults
+    };
+  }, [pastMatches, allRegistries]);
 
   const startMatch = () => {
-    if (currentUser.role === UserRole.GUEST) return;
-    
-    // Validation
-    if (!homeTeam.trim() || homeTeam === 'CASA' || !awayTeam.trim() || awayTeam === 'TRASFERTA') {
-      alert("Inserisci i nomi corretti per le squadre.");
+    if (currentUser.role === UserRole.GUEST) {
+      showToast("Accesso negato", "error");
       return;
     }
-
-    if (homeRoster.length === 0 || awayRoster.length === 0) {
-      alert("Aggiungi almeno un giocatore per squadra.");
-      return;
-    }
+    const errors = [];
+    if (!homeTeam.trim() || homeTeam === 'LA MIA SQUADRA') errors.push("Squadra Casa mancante.");
+    if (!awayTeam.trim() || awayTeam === 'AVVERSARI') errors.push("Squadra Trasferta mancante.");
+    if (homeRoster.length === 0) errors.push("Roster Casa vuoto.");
+    if (awayRoster.length === 0) errors.push("Roster Trasferta vuoto.");
+    if (!matchCategory.trim()) errors.push("Categoria mancante.");
+    if (errors.length > 0) { alert(errors.join("\n")); return; }
 
     const newMatch: Match = {
       id: Math.random().toString(36).substr(2, 9),
       date: new Date().toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' }),
-      category: matchCategory,
-      homeTeamName: homeTeam,
-      awayTeamName: awayTeam,
-      homeRoster,
-      awayRoster,
-      homeStaff,
-      awayStaff,
-      events: [],
-      isFinished: false,
+      category: matchCategory.trim(),
+      homeTeamName: homeTeam.toUpperCase(),
+      awayTeamName: awayTeam.toUpperCase(),
+      homeLogo, awayLogo,
+      homeRoster: JSON.parse(JSON.stringify(homeRoster)),
+      awayRoster: JSON.parse(JSON.stringify(awayRoster)),
+      homeStaff: JSON.parse(JSON.stringify(homeStaff)),
+      awayStaff: JSON.parse(JSON.stringify(awayStaff)),
+      events: [], isFinished: false, currentTime: 0, currentPeriod: 1,
       score: { home: 0, away: 0 }
     };
     setMatch(newMatch);
+    storage.setActiveMatch(newMatch);
     setView('LIVE');
   };
 
@@ -100,6 +176,7 @@ const App: React.FC = () => {
     if (match) {
       const finishedMatch = { ...match, isFinished: true };
       storage.saveMatch(finishedMatch);
+      storage.setActiveMatch(null);
       setPastMatches(storage.getMatches());
       setMatch(finishedMatch);
       setView('REPORT');
@@ -107,264 +184,239 @@ const App: React.FC = () => {
   };
 
   const navigateTo = (newView: AppState) => {
-    if ((newView === 'REGISTRY' || newView === 'CALENDAR') && currentUser.role === UserRole.GUEST) {
-      alert("Permesso negato. Modalità Ospite."); return;
+    if ((newView === 'CALENDAR' || newView === 'SETUP' || newView === 'TRAINING') && currentUser.role === UserRole.GUEST) {
+      showToast("Accesso negato", "error");
+      return;
     }
     setView(newView);
     window.scrollTo(0, 0);
   };
 
-  const handleAddStaff = (team: 'HOME' | 'AWAY') => {
-    if (!tempStaff.lastName.trim()) {
-      alert("Inserire almeno il cognome");
-      return;
-    }
-    const newMember: Player = {
-      id: Math.random().toString(36).substr(2, 9),
-      firstName: tempStaff.firstName.trim(),
-      lastName: tempStaff.lastName.trim(),
-      number: "S",
-      role: tempStaff.role
-    };
-    if (team === 'HOME') setHomeStaff([...homeStaff, newMember]);
-    else setAwayStaff([...awayStaff, newMember]);
-    setTempStaff({ firstName: '', lastName: '', role: '1° Allenatore' });
-    setShowStaffForm(null);
-  };
-
-  const handleImportRegistry = () => {
-    setHomeRoster([...myTeamProfile.players]);
-    const importedStaff: Player[] = [];
-    if (myTeamProfile.coachName) {
-      importedStaff.push({ id: 'c1', firstName: '', lastName: myTeamProfile.coachName, number: 'S', role: '1° Allenatore' });
-    }
-    if (myTeamProfile.assistantCoachName) {
-      importedStaff.push({ id: 'c2', firstName: '', lastName: myTeamProfile.assistantCoachName, number: 'S', role: '2° Allenatore' });
-    }
-    setHomeStaff(importedStaff);
-  };
-
-  const renderStaffSection = (staff: Player[], team: 'HOME' | 'AWAY', color: string) => {
-    const isBlue = color === 'blue';
-    const isAddingThisTeam = showStaffForm === team;
-    return (
-      <div className="bg-slate-50 p-4 md:p-5 rounded-2xl border border-slate-200 mt-4 shadow-inner">
-        <div className="flex items-center justify-between mb-4">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-            <UserCog size={14} className={isBlue ? 'text-blue-500' : 'text-red-500'} /> Area Tecnica
-          </label>
-          <button 
-            onClick={() => isAddingThisTeam ? setShowStaffForm(null) : setShowStaffForm(team)} 
-            className={`text-[8px] font-black px-3 py-1.5 rounded-lg border text-white transition-all active:scale-95 flex items-center gap-1.5 ${isAddingThisTeam ? 'bg-slate-500 border-slate-400' : (isBlue ? 'bg-blue-600 border-blue-500' : 'bg-red-600 border-red-500')}`}
-          >
-            {isAddingThisTeam ? <X size={10} /> : <Plus size={10} />}
-            {isAddingThisTeam ? 'ANNULLA' : 'AGGIUNGI'}
-          </button>
-        </div>
-        {isAddingThisTeam && (
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-4 animate-in slide-in-from-top-2">
-            <div className="grid grid-cols-1 gap-3">
-              <div className="flex gap-2">
-                <input type="text" placeholder="Nome" className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none" value={tempStaff.firstName} onChange={(e) => setTempStaff({...tempStaff, firstName: e.target.value})} />
-                <input type="text" placeholder="Cognome" className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none" value={tempStaff.lastName} onChange={(e) => setTempStaff({...tempStaff, lastName: e.target.value})} />
-              </div>
-              <div className="flex gap-2">
-                <select className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none" value={tempStaff.role} onChange={(e) => setTempStaff({...tempStaff, role: e.target.value})}>
-                  {STAFF_ROLES.map(role => <option key={role} value={role}>{role}</option>)}
-                </select>
-                <button onClick={() => handleAddStaff(team)} className="px-4 bg-emerald-500 text-white rounded-lg active:scale-95"><Check size={18} strokeWidth={3} /></button>
-              </div>
-            </div>
-          </div>
-        )}
-        <div className="space-y-2">
-          {staff.length === 0 ? (
-            <div className="text-center py-4 border-2 border-dashed border-slate-200 rounded-xl bg-white/50"><p className="text-[9px] text-slate-300 font-black uppercase italic">Nessun dirigente</p></div>
-          ) : (
-            staff.map(s => {
-              const isCoach = s.role?.includes("Allenatore");
-              return (
-                <div key={s.id} className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-100 shadow-sm">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center border shrink-0 ${isBlue ? (isCoach ? 'bg-blue-600 text-white border-blue-700' : 'bg-blue-50 text-blue-600 border-blue-100') : (isCoach ? 'bg-red-600 text-white border-red-700' : 'bg-red-50 text-red-600 border-red-100')}`}>
-                      {isCoach ? <Star size={14} fill="currentColor" /> : <UserCircle size={16} />}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-black text-slate-800 uppercase truncate leading-none mb-1">{s.firstName} {s.lastName}</p>
-                      <p className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded inline-block ${isCoach ? (isBlue ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700') : (isBlue ? 'bg-blue-50 text-blue-400' : 'bg-red-50 text-red-400')}`}>{s.role}</p>
-                    </div>
-                  </div>
-                  <button onClick={() => team === 'HOME' ? setHomeStaff(homeStaff.filter(x => x.id !== s.id)) : setAwayStaff(awayStaff.filter(x => x.id !== s.id))} className="text-slate-300 hover:text-red-500 p-2"><X size={14} /></button>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-    );
+  const handleImportRegistry = (team: 'HOME' | 'AWAY') => {
+    console.debug(`Importing registry data for ${team} team.`);
   };
 
   const renderHome = () => (
-    <div className="max-w-4xl mx-auto py-8 md:py-12 px-4 animate-in fade-in slide-in-from-bottom-4 duration-700 text-center">
-      <div className="flex justify-center mb-6">
-        <div className="bg-blue-600 p-5 rounded-[2.5rem] shadow-2xl shadow-blue-200 rotate-6 transition-transform hover:rotate-0">
-          <Trophy size={64} className="text-white" />
-        </div>
-      </div>
-      <h1 className="text-5xl md:text-7xl font-black text-slate-900 tracking-tighter mb-4">Handball<span className="text-blue-600">Pro</span></h1>
-      <p className="text-xl text-slate-500 font-medium max-w-lg mx-auto leading-relaxed mb-12">La piattaforma definitiva per la gestione tecnica e i referti ufficiali.</p>
+    <div className="max-w-6xl mx-auto py-6 md:py-12 px-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      {match && !match.isFinished && (
+         <div className="mb-6 p-4 bg-blue-600 rounded-3xl text-white flex items-center justify-between gap-4 animate-bounce-subtle cursor-pointer hover:bg-blue-700 transition-colors shadow-xl shadow-blue-200" onClick={() => navigateTo('LIVE')}>
+            <div className="flex items-center gap-3">
+               <div className="p-2 bg-white/20 rounded-xl"><Activity size={18} className="animate-pulse" /></div>
+               <div className="text-left">
+                  <p className="text-[8px] font-black uppercase tracking-widest opacity-70">Gara in Corso</p>
+                  <p className="font-black text-sm md:text-lg">{match.homeTeamName} {match.score.home} - {match.score.away} {match.awayTeamName}</p>
+               </div>
+            </div>
+            <button className="bg-white text-blue-600 px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shrink-0">Live</button>
+         </div>
+      )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-        <button onClick={() => navigateTo('SETUP')} className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 hover:border-blue-500 transition-all text-left group">
-          <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center text-white mb-4 group-hover:scale-110 transition-transform"><Plus size={24} /></div>
-          <h3 className="text-lg font-black text-slate-900">Nuova Partita</h3>
-          <p className="text-slate-500 text-xs font-medium">Gestione live e sanzioni panchina.</p>
-        </button>
-        <button onClick={() => navigateTo('CALENDAR')} className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 hover:border-blue-400 transition-all text-left group">
-          <div className="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center text-white mb-4 group-hover:scale-110 transition-transform"><CalendarIcon size={24} /></div>
-          <h3 className="text-lg font-black text-slate-900">Calendario</h3>
-          <p className="text-slate-500 text-xs font-medium">Pianifica i turni di campionato.</p>
-        </button>
-        <button onClick={() => navigateTo('HISTORY')} className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 hover:border-emerald-500 transition-all text-left group">
-          <div className="w-12 h-12 bg-emerald-600 rounded-xl flex items-center justify-center text-white mb-4 group-hover:scale-110 transition-transform"><HistoryIcon size={24} /></div>
-          <h3 className="text-lg font-black text-slate-900">Archivio</h3>
-          <p className="text-slate-500 text-xs font-medium">Referti e statistiche salvate.</p>
-        </button>
-      </div>
-    </div>
-  );
-
-  const renderSetup = () => (
-    <div className="max-w-7xl mx-auto py-6 md:py-12 px-4 md:px-6 animate-in fade-in">
-      {/* Upper Navigation / Back */}
-      <div className="flex flex-col md:flex-row items-center justify-between mb-8 bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100 gap-4">
-        <div>
-          <h2 className="text-3xl md:text-5xl font-black text-slate-900 tracking-tighter uppercase">Configurazione Match</h2>
-          <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">Rosa e Staff Tecnico</p>
-        </div>
-        <button onClick={() => navigateTo('HOME')} className="flex items-center gap-2 px-6 py-3 text-slate-400 font-black hover:text-slate-900 bg-slate-50 rounded-xl border border-slate-100 uppercase tracking-widest text-[10px] transition-all active:scale-95">
-          <ArrowLeft size={16} /> Indietro
-        </button>
-      </div>
-
-      {/* Manual Team Info Input Section */}
-      <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-200 mb-10 transition-all">
-        <div className="flex items-center gap-2 mb-6">
-          <Info size={18} className="text-blue-600" />
-          <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Informazioni Gara</h3>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Category Selector with Manual Entry */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
-              <Layers size={12} /> Categoria
-            </label>
-            <input 
-              list="setup-categories"
-              className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 transition-all placeholder:font-normal placeholder:text-slate-300"
-              value={matchCategory}
-              onChange={e => setMatchCategory(e.target.value)}
-              placeholder="Inserisci o seleziona categoria"
-            />
-            <datalist id="setup-categories">
-              {SUGGESTED_CATEGORIES.map(c => <option key={c} value={c} />)}
-            </datalist>
-          </div>
-
-          {/* Home Team Input */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
-              <MapPin size={12} /> Squadra Casa
-            </label>
-            <input 
-              type="text"
-              className="w-full px-5 py-4 bg-slate-50 border border-blue-100 rounded-2xl font-black text-slate-900 uppercase tracking-tight focus:ring-2 focus:ring-blue-500 outline-none transition-all placeholder:font-normal placeholder:text-slate-300"
-              value={homeTeam === 'CASA' ? '' : homeTeam}
-              onChange={e => setHomeTeam(e.target.value.toUpperCase())}
-              placeholder="ES: HC MILANO"
-            />
-          </div>
-
-          {/* Away Team Input */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-red-400 uppercase tracking-widest ml-1 flex items-center gap-1.5">
-              <MapPin size={12} /> Squadra Trasferta
-            </label>
-            <input 
-              type="text"
-              className="w-full px-5 py-4 bg-slate-50 border border-red-100 rounded-2xl font-black text-slate-900 uppercase tracking-tight focus:ring-2 focus:ring-red-500 outline-none transition-all placeholder:font-normal placeholder:text-slate-300"
-              value={awayTeam === 'TRASFERTA' ? '' : awayTeam}
-              onChange={e => setAwayTeam(e.target.value.toUpperCase())}
-              placeholder="ES: AVVERSARI"
-            />
+      <div className="text-center mb-8 md:mb-12">
+        <div className="flex justify-center mb-4 md:mb-6">
+          <div className="bg-blue-600 p-4 md:p-5 rounded-3xl md:rounded-[2.5rem] shadow-2xl shadow-blue-200 rotate-6 transition-transform hover:rotate-0">
+            <Trophy size={48} className="text-white md:w-16 md:h-16" />
           </div>
         </div>
+        <h1 className="text-4xl md:text-7xl font-black text-slate-900 tracking-tighter mb-2 md:mb-4">Handball<span className="text-blue-600">Pro</span> <span className="text-slate-300 text-3xl md:text-5xl">v.02</span></h1>
+        <p className="text-sm md:text-xl text-slate-500 font-medium max-w-lg mx-auto leading-relaxed px-4">Performance tecnica, referti AI e gestione lab allenamenti.</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
-        {/* Home Team Section */}
-        <div className="flex flex-col h-full">
-          <RosterSetup 
-            teamName={homeTeam || 'CASA'} 
-            roster={homeRoster} 
-            onUpdate={setHomeRoster} 
-            accentColor="blue" 
-            hasRegistry={myTeamProfile.players.length > 0} 
-            onImportRegistry={handleImportRegistry} 
-            registryPlayers={myTeamProfile.players}
-          />
-          {renderStaffSection(homeStaff, 'HOME', 'blue')}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 mb-12">
+        <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
+          <button onClick={() => navigateTo('SETUP')} className="bg-white p-6 md:p-8 rounded-3xl md:rounded-[2.5rem] shadow-sm border border-slate-200 hover:border-blue-500 hover:shadow-xl transition-all text-left group">
+            <div className="w-12 h-12 md:w-14 md:h-14 bg-blue-600 rounded-2xl flex items-center justify-center text-white mb-4 md:mb-6 group-hover:scale-110 transition-transform shadow-lg shadow-blue-100"><Plus size={24} /></div>
+            <h3 className="text-xl md:text-2xl font-black text-slate-900 mb-2">{t.newMatch}</h3>
+            <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">Referto live professionale con statistiche avanzate.</p>
+          </button>
+
+          <button onClick={() => navigateTo('TRAINING')} className="bg-white p-6 md:p-8 rounded-3xl md:rounded-[2.5rem] shadow-sm border border-slate-200 hover:border-emerald-500 hover:shadow-xl transition-all text-left group">
+            <div className="w-12 h-12 md:w-14 md:h-14 bg-emerald-600 rounded-2xl flex items-center justify-center text-white mb-4 md:mb-6 group-hover:scale-110 transition-transform shadow-lg shadow-emerald-100"><Dumbbell size={24} /></div>
+            <h3 className="text-xl md:text-2xl font-black text-slate-900 mb-2">Training Lab</h3>
+            <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">Presenze, ruoli specifici e valutazione miglioramenti atleti.</p>
+          </button>
+          
+          <button onClick={() => navigateTo('CALENDAR')} className="bg-white p-6 md:p-8 rounded-3xl md:rounded-[2.5rem] shadow-sm border border-slate-200 hover:border-blue-400 hover:shadow-xl transition-all text-left group">
+            <div className="w-12 h-12 md:w-14 md:h-14 bg-blue-500 rounded-2xl flex items-center justify-center text-white mb-4 md:mb-6 group-hover:scale-110 transition-transform shadow-lg shadow-blue-100"><CalendarIcon size={24} /></div>
+            <h3 className="text-xl md:text-2xl font-black text-slate-900 mb-2">{t.calendar}</h3>
+            <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">Pianifica turni di campionato e amichevoli.</p>
+          </button>
+
+          <button onClick={() => navigateTo('HISTORY')} className="bg-white p-6 md:p-8 rounded-3xl md:rounded-[2.5rem] shadow-sm border border-slate-200 hover:border-slate-500 hover:shadow-xl transition-all text-left group">
+            <div className="w-12 h-12 md:w-14 md:h-14 bg-slate-800 rounded-2xl flex items-center justify-center text-white mb-4 md:mb-6 group-hover:scale-110 transition-transform shadow-lg shadow-slate-100"><HistoryIcon size={24} /></div>
+            <h3 className="text-xl md:text-2xl font-black text-slate-900 mb-2">{t.archive}</h3>
+            <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">Archivio storico referti e analisi dati stagionali.</p>
+          </button>
         </div>
 
-        {/* Away Team Section */}
-        <div className="flex flex-col h-full">
-          <RosterSetup 
-            teamName={awayTeam || 'TRASFERTA'} 
-            roster={awayRoster} 
-            onUpdate={setAwayRoster} 
-            accentColor="red" 
-          />
-          {renderStaffSection(awayStaff, 'AWAY', 'red')}
+        <div className="lg:col-span-4 space-y-6">
+          <div className="bg-white rounded-3xl md:rounded-[2.5rem] p-6 md:p-8 border border-slate-200 shadow-sm transition-all hover:shadow-md group">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-50 rounded-xl text-blue-600"><Shield size={20} /></div>
+                <h3 className="font-black text-[10px] md:text-sm uppercase tracking-widest text-slate-800">I miei Team</h3>
+              </div>
+              <button onClick={() => navigateTo('SETTINGS')} className="p-2 text-slate-300 hover:text-blue-600 transition-colors"><ChevronRight size={18} /></button>
+            </div>
+            <div className="space-y-4">
+              {allRegistries.length === 0 ? (
+                <p className="text-xs text-slate-400 font-medium py-4 text-center">Nessun team configurato.</p>
+              ) : (
+                allRegistries.map((reg, idx) => (
+                  <div key={idx} className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                    {reg.logo ? <img src={reg.logo} className="w-10 h-10 object-contain rounded-lg bg-white p-1" /> : <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-slate-300 border border-slate-200"><Shield size={16} /></div>}
+                    <div className="flex flex-col min-w-0">
+                      <p className="text-[10px] font-black uppercase text-slate-900 truncate">{reg.teamName}</p>
+                      <span className="text-[8px] font-bold text-blue-600 uppercase tracking-widest">{reg.category}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+          <button onClick={() => navigateTo('SETTINGS')} className="w-full bg-slate-900 p-6 rounded-[2rem] text-white flex items-center justify-between group">
+             <div className="flex items-center gap-3">
+                <SettingsIcon className="text-slate-500 group-hover:rotate-90 transition-transform" />
+                <span className="font-black text-xs uppercase tracking-widest">Configura App</span>
+             </div>
+             <ChevronRight size={20} className="text-slate-500" />
+          </button>
         </div>
       </div>
-
-      <div className="flex justify-center pb-20 md:pb-0">
-        <button onClick={startMatch} className="group relative bg-slate-900 text-white px-20 py-8 rounded-[3rem] font-black text-2xl md:text-3xl shadow-xl transition-all active:scale-95 flex items-center gap-8 overflow-hidden hover:bg-black">
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-600/20 to-red-600/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-          <span className="relative z-10 uppercase tracking-tight">Fischio d'Inizio</span>
-          <Trophy size={40} className="text-blue-400 relative z-10 group-hover:rotate-12 transition-transform" />
-        </button>
-      </div>
+      
+      {/* Invite Modal Overlay */}
+      {pendingInvite && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[1000] flex items-center justify-center p-4">
+           <div className="bg-white rounded-[2.5rem] w-full max-w-md overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+              <div className="bg-blue-600 p-8 text-center text-white relative">
+                 <div className="w-20 h-20 bg-white/20 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-xl">
+                    <InviteIcon size={40} />
+                 </div>
+                 <h2 className="text-2xl font-black uppercase tracking-tight">{t.inviteWelcome}</h2>
+                 <p className="text-[10px] font-bold opacity-70 uppercase tracking-widest mt-1">Configurazione Rapida Profilo</p>
+              </div>
+              <div className="p-8 text-center space-y-6">
+                 <div className="space-y-2">
+                    <p className="text-slate-400 text-xs font-medium">{t.inviteFrom} <span className="text-slate-900 font-black uppercase">{pendingInvite.inviter}</span> {t.joinAs}</p>
+                    <div className="bg-blue-50 border border-blue-100 py-3 rounded-2xl">
+                       <span className="text-xl font-black text-blue-600 uppercase tracking-tighter">{pendingInvite.role === UserRole.OFFICIAL ? 'EDITOR' : 'VISUALIZZATORE'}</span>
+                    </div>
+                    <p className="text-slate-400 text-xs font-medium">per la società <span className="text-slate-900 font-black uppercase">{pendingInvite.society}</span></p>
+                 </div>
+                 <div className="flex flex-col gap-3">
+                    <button onClick={handleAcceptInvite} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl active:scale-95 transition-all">
+                       {t.acceptInvite}
+                    </button>
+                    <button onClick={() => setPendingInvite(null)} className="w-full text-slate-400 font-black uppercase tracking-widest text-[10px] hover:text-red-500 transition-colors py-2">
+                       {t.decline}
+                    </button>
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 
   return (
     <div className="min-h-screen bg-[#f8fafc] pb-24 md:pb-12">
-      <nav className="bg-white/90 backdrop-blur-xl border-b border-slate-200/60 px-4 md:px-8 py-5 flex items-center justify-between sticky top-0 z-50">
-        <div className="flex items-center gap-3 cursor-pointer group" onClick={() => navigateTo('HOME')}>
-          <div className="bg-blue-600 p-2.5 rounded-xl shadow-lg group-hover:rotate-12 transition-all"><Trophy size={22} className="text-white" /></div>
-          <span className="text-xl md:text-2xl font-black tracking-tighter text-slate-900">Handball<span className="text-blue-600">Pro</span></span>
+      {toast && (
+        <div className="fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 z-[999] animate-in fade-in slide-in-from-bottom-4 duration-300">
+           <div className={`px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 font-black text-xs uppercase tracking-widest border border-white/20 backdrop-blur-md ${toast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>
+              {toast.type === 'success' ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}
+              {toast.message}
+           </div>
         </div>
-        <div className="flex items-center gap-2 md:gap-4">
-          <div className="hidden lg:flex flex-col items-end mr-2">
-            <span className="text-[10px] font-black uppercase text-slate-400 leading-none">{currentUser.role}</span>
-            <span className="text-[11px] font-black text-slate-900">{currentUser.lastName} {currentUser.firstName[0]}.</span>
-          </div>
-          <button onClick={() => navigateTo('HOME')} className={`p-3 rounded-xl transition-all ${view === 'HOME' ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-600'}`} title="Home"><Home size={20} /></button>
-          <button onClick={() => navigateTo('HISTORY')} className={`p-3 rounded-xl transition-all ${view === 'HISTORY' ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-600'}`} title="Archivio"><HistoryIcon size={20} /></button>
-          <button onClick={() => navigateTo('SETTINGS')} className={`p-3 rounded-xl transition-all ${view === 'SETTINGS' ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-600'}`} title="Impostazioni"><SettingsIcon size={20} /></button>
+      )}
+
+      <nav className="bg-white/95 backdrop-blur-xl border-b border-slate-200/60 px-4 md:px-8 py-4 md:py-5 flex items-center justify-between sticky top-0 z-50 shadow-sm">
+        <div className="flex items-center gap-2 md:gap-3 cursor-pointer group" onClick={() => navigateTo('HOME')}>
+          <div className="bg-blue-600 p-2 md:p-2.5 rounded-xl shadow-lg group-hover:rotate-12 transition-all"><Trophy size={18} className="text-white md:w-[22px] md:h-[22px]" /></div>
+          <span className="text-lg md:text-2xl font-black tracking-tighter text-slate-900">Handball<span className="text-blue-600">Pro</span> <span className="text-slate-400 text-xs md:text-sm">v.02</span></span>
+        </div>
+        <div className="flex items-center gap-1 md:gap-2">
+          <button onClick={() => navigateTo('HOME')} className={`p-2.5 md:p-3 rounded-xl transition-all ${view === 'HOME' ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}><Home size={20} /></button>
+          <button onClick={() => navigateTo('TRAINING')} className={`p-2.5 md:p-3 rounded-xl transition-all ${view === 'TRAINING' ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}><Dumbbell size={20} /></button>
+          <button onClick={() => navigateTo('HISTORY')} className={`p-2.5 md:p-3 rounded-xl transition-all ${view === 'HISTORY' ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}><HistoryIcon size={20} /></button>
+          <button onClick={() => navigateTo('SETTINGS')} className={`p-2.5 md:p-3 rounded-xl transition-all ${view === 'SETTINGS' ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}><SettingsIcon size={20} /></button>
         </div>
       </nav>
 
       <main className="container mx-auto">
         {view === 'HOME' && renderHome()}
-        {view === 'SETTINGS' && <Settings user={currentUser} onUpdateUser={setCurrentUser} onBack={() => setView('HOME')} />}
-        {view === 'REGISTRY' && <div className="p-4"><TeamRegistry profile={myTeamProfile} onSave={setMyTeamProfile} isAdmin={currentUser.role === UserRole.ADMIN} /></div>}
-        {view === 'HISTORY' && <div className="p-4"><MatchHistory matches={pastMatches} onView={(m) => {setMatch(m); setView('REPORT');}} onDelete={(id) => { storage.deleteMatch(id); setPastMatches(storage.getMatches()); }} onBack={() => setView('HOME')} canDelete={currentUser.role === UserRole.ADMIN} /></div>}
-        {view === 'SETUP' && renderSetup()}
-        {view === 'LIVE' && match && <div className="p-4"><MatchConsole match={match} onUpdate={setMatch} onFinish={finalizeMatch} /></div>}
-        {view === 'REPORT' && match && <div className="p-4"><FinalReport match={match} onClose={() => setView('HOME')} /></div>}
-        {view === 'CALENDAR' && <div className="p-4"><CalendarManager matches={calendarMatches} onAdd={(m) => setCalendarMatches([...calendarMatches, m])} onDelete={(id) => setCalendarMatches(calendarMatches.filter(x => x.id !== id))} onStart={(sm) => { setHomeTeam(sm.homeTeam); setAwayTeam(sm.awayTeam); setMatchCategory(sm.category); setView('SETUP'); }} onBack={() => setView('HOME')} canEdit={currentUser.role === UserRole.ADMIN} suggestedCategories={SUGGESTED_CATEGORIES} /></div>}
+        {view === 'TRAINING' && <TrainingManager onBack={() => setView('HOME')} />}
+        {view === 'SETTINGS' && <Settings user={currentUser} onUpdateUser={setCurrentUser} onBack={() => setView('HOME')} t={t} onLangChange={(l) => { setLang(l); storage.setLanguage(l); }} onNotify={showToast} />}
+        {view === 'HISTORY' && <div className="p-4"><MatchHistory matches={pastMatches} onView={(m) => {setMatch(m); setView('REPORT');}} onDelete={(id) => { storage.deleteMatch(id); setPastMatches(storage.getMatches()); showToast("Match eliminato"); }} onBack={() => setView('HOME')} canDelete={currentUser.role === UserRole.ADMIN} /></div>}
+        {view === 'SETUP' && (
+          <div className="max-w-7xl mx-auto py-6 md:py-12 px-4 md:px-6 animate-in fade-in">
+             <div className="flex flex-col md:flex-row items-center justify-between mb-8 bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100 gap-4">
+              <div className="text-center md:text-left">
+                <h2 className="text-3xl md:text-5xl font-black text-slate-900 tracking-tighter uppercase">{t.setup} Gara</h2>
+                <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px]">{t.roster} & {t.staff}</p>
+              </div>
+              <button onClick={() => navigateTo('HOME')} className="flex items-center gap-2 px-6 py-3 text-slate-400 font-black hover:text-slate-900 bg-slate-50 rounded-xl border border-slate-100 uppercase tracking-widest text-[10px] transition-all active:scale-95">
+                <ArrowLeft size={16} /> {t.home}
+              </button>
+            </div>
+            <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-200 mb-10 transition-all">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 flex items-center gap-1.5"><Layers size={12} /> {t.category}</label>
+                  <input list="setup-categories" className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 transition-all" value={matchCategory} onChange={e => setMatchCategory(e.target.value)} placeholder="Seleziona categoria" />
+                  <datalist id="setup-categories">{SUGGESTED_CATEGORIES.map(c => <option key={c} value={c} />)}</datalist>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest ml-1 flex items-center gap-1.5"><MapPin size={12} /> Casa</label>
+                  <div className="flex gap-2">
+                    {homeLogo && <img src={homeLogo} alt="" className="w-12 h-12 object-contain bg-slate-50 border border-blue-100 rounded-xl p-1 shrink-0" />}
+                    <input type="text" className="flex-1 px-5 py-4 bg-slate-50 border border-blue-100 rounded-2xl font-black text-slate-900 uppercase tracking-tight" value={homeTeam} onChange={e => setHomeTeam(e.target.value.toUpperCase())} />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-red-400 uppercase tracking-widest ml-1 flex items-center gap-1.5"><MapPin size={12} /> Trasferta</label>
+                  <div className="flex gap-2">
+                    {awayLogo && <img src={awayLogo} alt="" className="w-12 h-12 object-contain bg-slate-50 border border-red-100 rounded-xl p-1 shrink-0" />}
+                    <input type="text" className="flex-1 px-5 py-4 bg-slate-50 border border-red-100 rounded-2xl font-black text-slate-900 uppercase tracking-tight" value={awayTeam} onChange={e => setAwayTeam(e.target.value.toUpperCase())} />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
+              <RosterSetup 
+                teamName={homeTeam} 
+                roster={homeRoster} 
+                staff={homeStaff} 
+                onUpdate={setHomeRoster} 
+                onUpdateStaff={setHomeStaff} 
+                accentColor="blue" 
+                hasRegistry={allRegistries.length > 0} 
+                registryPlayers={allRegistries.find(r => r.category.toUpperCase() === matchCategory.toUpperCase())?.players || []}
+                onImportRegistry={() => handleImportRegistry('HOME')} 
+                t={t} 
+              />
+              <RosterSetup 
+                teamName={awayTeam} 
+                roster={awayRoster} 
+                staff={awayStaff} 
+                onUpdate={setAwayRoster} 
+                onUpdateStaff={setAwayStaff} 
+                accentColor="red" 
+                hasRegistry={allRegistries.length > 0} 
+                registryPlayers={allRegistries.find(r => r.teamName.toUpperCase() === awayTeam.toUpperCase())?.players || []}
+                onImportRegistry={() => handleImportRegistry('AWAY')} 
+                t={t} 
+              />
+            </div>
+            <div className="flex justify-center pb-20 md:pb-0">
+              <button onClick={startMatch} className="group relative bg-slate-900 text-white px-10 md:px-20 py-6 md:py-8 rounded-[2rem] md:rounded-[3rem] font-black text-xl md:text-3xl shadow-xl transition-all active:scale-95 flex items-center gap-4 md:gap-8 overflow-hidden hover:bg-black">
+                <span className="relative z-10 uppercase tracking-tight">{t.kickOff}</span>
+                <Trophy size={32} className="text-blue-400 relative z-10 group-hover:rotate-12 transition-transform md:w-10 md:h-10" />
+              </button>
+            </div>
+          </div>
+        )}
+        {view === 'LIVE' && match && <div className="p-4"><MatchConsole match={match} onUpdate={setMatch} onFinish={finalizeMatch} t={t} /></div>}
+        {view === 'REPORT' && match && <div className="p-4"><FinalReport match={match} onClose={() => setView('HOME')} t={t} language={lang} /></div>}
+        {view === 'CALENDAR' && <div className="p-4"><CalendarManager matches={calendarMatches} onAdd={(m) => setCalendarMatches([...calendarMatches, m])} onDelete={(id) => setCalendarMatches(calendarMatches.filter(x => x.id !== id))} onStart={(sm) => { setMatchCategory(sm.category); setHomeTeam(sm.homeTeam); setAwayTeam(sm.awayTeam); setView('SETUP'); }} onBack={() => setView('HOME')} canEdit={currentUser.role === UserRole.ADMIN} suggestedCategories={SUGGESTED_CATEGORIES} t={t} /></div>}
       </main>
     </div>
   );

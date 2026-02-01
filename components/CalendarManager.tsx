@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
 import { ScheduledMatch } from '../types';
-import { Calendar, Plus, Trash2, Play, Clock, MapPin, Layers, X, ArrowLeft } from 'lucide-react';
+import { storage } from '../services/storageService';
+import { Calendar, Plus, Trash2, Play, Clock, MapPin, Layers, X, ArrowLeft, Share2, FileJson } from 'lucide-react';
 
 interface CalendarManagerProps {
   matches: ScheduledMatch[];
@@ -33,8 +34,8 @@ const CalendarManager: React.FC<CalendarManagerProps> = ({
       id: Math.random().toString(36).substr(2, 9),
       date: newMatch.date!,
       time: newMatch.time!,
-      homeTeam: newMatch.homeTeam!,
-      awayTeam: newMatch.awayTeam!,
+      homeTeam: newMatch.homeTeam!.toUpperCase(),
+      awayTeam: newMatch.awayTeam!.toUpperCase(),
       category: newMatch.category || 'Serie B'
     };
 
@@ -45,6 +46,14 @@ const CalendarManager: React.FC<CalendarManagerProps> = ({
       time: '18:00',
       category: 'Serie B'
     });
+  };
+
+  const handleExport = () => {
+    if (matches.length === 0) {
+      alert("Nessuna gara in calendario da esportare.");
+      return;
+    }
+    storage.exportData(matches, 'HPro_Calendario');
   };
 
   return (
@@ -59,13 +68,19 @@ const CalendarManager: React.FC<CalendarManagerProps> = ({
           </h2>
           <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] mt-1">Gestione prossima stagione e turni</p>
         </div>
-        <div className="flex items-center justify-center gap-4">
+        <div className="flex items-center justify-center gap-3">
+          <button 
+            onClick={handleExport}
+            className="bg-white border border-slate-200 text-slate-600 hover:border-blue-400 hover:text-blue-600 px-5 py-3 rounded-xl font-black flex items-center gap-2 transition-all active:scale-95 text-xs uppercase tracking-widest"
+          >
+            <Share2 size={16} /> Esporta
+          </button>
           {canEdit && (
             <button 
               onClick={() => setShowAddForm(true)}
               className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-black flex items-center gap-2 shadow-lg shadow-blue-100 transition-all active:scale-95 text-xs uppercase tracking-widest"
             >
-              <Plus size={18} /> Aggiungi Gara
+              <Plus size={18} /> Aggiungi
             </button>
           )}
         </div>
@@ -121,18 +136,18 @@ const CalendarManager: React.FC<CalendarManagerProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Squadra Casa</label>
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">La mia Squadra (Casa)</label>
                 <input 
                   type="text" 
                   className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-xl font-black text-slate-900 uppercase tracking-tighter placeholder:font-normal placeholder:text-slate-300"
                   value={newMatch.homeTeam}
                   onChange={e => setNewMatch({...newMatch, homeTeam: e.target.value})}
-                  placeholder="NOME SOCIETÀ"
+                  placeholder="LA MIA SQUADRA"
                 />
               </div>
 
               <div className="space-y-1">
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Squadra Trasferta</label>
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Avversari (Trasferta)</label>
                 <input 
                   type="text" 
                   className="w-full px-4 py-4 bg-slate-50 border border-slate-100 rounded-xl font-black text-slate-900 uppercase tracking-tighter placeholder:font-normal placeholder:text-slate-300"
