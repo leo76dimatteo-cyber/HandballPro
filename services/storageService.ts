@@ -1,5 +1,5 @@
 
-import { Match, TeamProfile, ScheduledMatch, UserProfile, UserRole, Language, TrainingSession } from '../types';
+import { Match, TeamProfile, ScheduledMatch, UserProfile, UserRole, Language, TrainingSession, Collaborator } from '../types';
 
 const KEYS = {
   USER_PROFILE: 'hpro_user_v2',
@@ -7,7 +7,15 @@ const KEYS = {
   REGISTRIES: 'hpro_registries_v3',
   CALENDAR: 'hpro_calendar_v2',
   ACTIVE_MATCH: 'hpro_active_match_v2',
-  TRAININGS: 'hpro_trainings_v1'
+  TRAININGS: 'hpro_trainings_v1',
+  COLLABORATORS: 'hpro_collaborators_v1'
+};
+
+const getDeviceType = (): 'Mobile' | 'Desktop' | 'Tablet' | 'Unknown' => {
+  const ua = navigator.userAgent;
+  if (/(tablet|ipad|playbook|silk)|(android(?!.*mobi))/i.test(ua)) return 'Tablet';
+  if (/Mobile|Android|iP(hone|od)|IEMobile|BlackBerry|Kindle|Silk-Accelerated|(hpw|web)OS|Opera M(obi|ini)/.test(ua)) return 'Mobile';
+  return 'Desktop';
 };
 
 export const storage = {
@@ -16,15 +24,75 @@ export const storage = {
     const saved = localStorage.getItem(KEYS.USER_PROFILE);
     if (saved) return JSON.parse(saved);
     return {
-      id: 'default',
+      id: Math.random().toString(36).substr(2, 9),
       firstName: 'Operatore',
       lastName: 'HandballPro',
       society: 'Nessuna Società',
       role: UserRole.ADMIN,
-      language: 'it'
+      language: 'it',
+      lastActive: Date.now(),
+      deviceName: getDeviceType()
     };
   },
-  setUser: (user: UserProfile) => localStorage.setItem(KEYS.USER_PROFILE, JSON.stringify(user)),
+  setUser: (user: UserProfile) => {
+    const userWithActivity = { 
+      ...user, 
+      lastActive: Date.now(),
+      deviceName: getDeviceType() 
+    };
+    localStorage.setItem(KEYS.USER_PROFILE, JSON.stringify(userWithActivity));
+    
+    // Sync to collaborators list with device metadata
+    storage.syncCollaborator(userWithActivity as Collaborator);
+  },
+
+  // Collaborators Management
+  getCollaborators: (): Collaborator[] => {
+    const saved = localStorage.getItem(KEYS.COLLABORATORS);
+    const collaborators: Collaborator[] = saved ? JSON.parse(saved) : [];
+    
+    return collaborators.map(c => ({
+      ...c,
+      isOnline: c.lastActive ? (Date.now() - c.lastActive < 300000) : false
+    }));
+  },
+
+  syncCollaborator: (collab: Collaborator) => {
+    const list = storage.getCollaborators();
+    const deviceType = getDeviceType();
+    
+    const index = list.findIndex(c => c.id === collab.id);
+    if (index > -1) {
+      list[index] = { 
+        ...list[index], 
+        ...collab, 
+        deviceType,
+        lastActive: Date.now() 
+      };
+    } else {
+      list.push({ 
+        ...collab, 
+        joinedAt: new Date().toISOString(), 
+        lastActive: Date.now(),
+        deviceType
+      });
+    }
+    localStorage.setItem(KEYS.COLLABORATORS, JSON.stringify(list));
+  },
+
+  updateCollaboratorRole: (id: string, role: UserRole) => {
+    const list = storage.getCollaborators();
+    const index = list.findIndex(c => c.id === id);
+    if (index > -1) {
+      list[index].role = role;
+      localStorage.setItem(KEYS.COLLABORATORS, JSON.stringify(list));
+    }
+  },
+
+  removeCollaborator: (id: string) => {
+    const list = storage.getCollaborators().filter(c => c.id !== id);
+    localStorage.setItem(KEYS.COLLABORATORS, JSON.stringify(list));
+  },
 
   getLanguage: (): Language => {
     return storage.getUser().language || 'it';
@@ -149,6 +217,7 @@ export const storage = {
       registries: storage.getAllRegistries(),
       calendar: storage.getCalendar(),
       trainings: storage.getTrainings(),
+      collaborators: storage.getCollaborators(),
       exportedAt: new Date().toISOString()
     };
     storage.exportData(data, 'HandballPro_FullBackup');
@@ -163,6 +232,7 @@ export const storage = {
       if (data.registries) localStorage.setItem(KEYS.REGISTRIES, JSON.stringify(data.registries));
       if (data.calendar) storage.setCalendar(data.calendar);
       if (data.trainings) localStorage.setItem(KEYS.TRAININGS, JSON.stringify(data.trainings));
+      if (data.collaborators) localStorage.setItem(KEYS.COLLABORATORS, JSON.stringify(data.collaborators));
       return true;
     } catch (e) {
       console.error("Errore importazione", e);

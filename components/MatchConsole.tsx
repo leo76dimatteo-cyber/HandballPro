@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Match, Player, EventType, MatchEvent } from '../types';
-import { Play, Pause, RotateCcw, Award, AlertTriangle, XCircle, ShieldCheck, Pencil, Check, X, Settings2, Coffee, Plus, Minus, Zap, UserCog, Ban, Undo2, Trash2, Clock, RefreshCcw, Target, Shield, ChevronUp, ChevronDown } from 'lucide-react';
+import { Play, Pause, RotateCcw, Award, AlertTriangle, XCircle, ShieldCheck, Pencil, Check, X, Settings2, Coffee, Plus, Minus, Zap, UserCog, Ban, Undo2, Trash2, Clock, RefreshCw, Target, Shield, ChevronUp, ChevronDown, BarChart3, TrendingUp } from 'lucide-react';
 
 interface MatchConsoleProps {
   match: Match;
@@ -38,6 +38,28 @@ const MatchConsole: React.FC<MatchConsoleProps> = ({ match, onUpdate, onFinish, 
   const [timeIsUp, setTimeIsUp] = useState(false);
 
   const targetSeconds = periodDurations[currentPeriod];
+
+  // Calcola le statistiche per la persona selezionata
+  const selectedStats = useMemo(() => {
+    if (!selectedPerson) return null;
+    const pEvents = match.events.filter(e => e.playerId === selectedPerson.person.id);
+    const goals = pEvents.filter(e => e.type === EventType.GOAL).length;
+    const misses = pEvents.filter(e => e.type === EventType.MISS).length;
+    const totalShots = goals + misses;
+    
+    return {
+      goals,
+      saves: pEvents.filter(e => e.type === EventType.SAVE).length,
+      misses,
+      lostBalls: pEvents.filter(e => e.type === EventType.LOST_BALL).length,
+      twoMins: pEvents.filter(e => e.type === EventType.TWO_MINUTES).length,
+      yellow: pEvents.filter(e => e.type === EventType.YELLOW_CARD).length,
+      red: pEvents.filter(e => e.type === EventType.RED_CARD).length,
+      blue: pEvents.filter(e => e.type === EventType.BLUE_CARD).length,
+      efficiency: totalShots > 0 ? Math.round((goals / totalShots) * 100) : 0,
+      totalShots
+    };
+  }, [selectedPerson, match.events]);
 
   // Calcola il punteggio basato sugli eventi
   const calculateCurrentScore = (events: MatchEvent[]) => {
@@ -183,8 +205,6 @@ const MatchConsole: React.FC<MatchConsoleProps> = ({ match, onUpdate, onFinish, 
     const newEvents = [...currentMatch.events, newEvent];
     const newScore = calculateCurrentScore(newEvents);
     
-    // Manteniamo eventuali correzioni manuali se presenti?
-    // Per ora, l'aggiunta di un evento ricalcola basandosi sugli eventi stessi.
     onUpdate({
       ...currentMatch,
       events: newEvents,
@@ -192,7 +212,6 @@ const MatchConsole: React.FC<MatchConsoleProps> = ({ match, onUpdate, onFinish, 
       currentTime: seconds,
       currentPeriod: currentPeriod
     });
-    setSelectedPerson(null);
   };
 
   const deleteEvent = (eventId: string) => {
@@ -405,11 +424,76 @@ const MatchConsole: React.FC<MatchConsoleProps> = ({ match, onUpdate, onFinish, 
         {/* Central Controls */}
         <div className="lg:col-span-6 space-y-4">
           <div className={`bg-white p-4 md:p-6 rounded-2xl shadow-xl border-2 transition-all md:sticky md:top-[80px] z-30 ${selectedPerson ? 'border-blue-500 ring-4 ring-blue-50' : 'border-slate-100 opacity-90'}`}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-black text-slate-500 uppercase tracking-widest text-[9px] truncate max-w-[180px]">
-                {selectedPerson ? `${selectedPerson.person.lastName} ${selectedPerson.isStaff ? `(${selectedPerson.person.role})` : ''}` : 'Seleziona dalla lista'}
-              </h3>
-              {selectedPerson && <button onClick={() => setSelectedPerson(null)} className="p-1 bg-slate-100 rounded-full text-slate-400"><X size={12} /></button>}
+            <div className="flex flex-col gap-3 mb-4">
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col min-w-0">
+                  <h3 className="font-black text-slate-900 uppercase tracking-tight text-sm md:text-base leading-none mb-1 truncate">
+                    {selectedPerson ? (
+                      selectedPerson.isStaff 
+                        ? `${selectedPerson.person.lastName} ${selectedPerson.person.firstName}` 
+                        : `[#${selectedPerson.person.number}] ${selectedPerson.person.lastName} ${selectedPerson.person.firstName}`
+                    ) : 'Nessuna selezione'}
+                  </h3>
+                  {selectedPerson && (
+                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">
+                      {selectedPerson.isStaff ? selectedPerson.person.role : 'Atleta in campo'}
+                    </p>
+                  )}
+                </div>
+                {selectedPerson && (
+                  <button onClick={() => setSelectedPerson(null)} className="p-2 bg-slate-100 rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors">
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+
+              {/* STATS SUMMARY (SOLO SE QUALCUNO È SELEZIONATO) */}
+              {selectedPerson && selectedStats && (
+                <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-slate-100 animate-in fade-in slide-in-from-top-1 duration-300">
+                  {!selectedPerson.isStaff && (
+                    <div className="flex items-center gap-1.5 bg-blue-600 text-white px-2 py-1.5 rounded-lg shadow-sm" title="Efficienza al tiro">
+                      <TrendingUp size={12} className="text-white" />
+                      <span className="text-xs font-black">{selectedStats.efficiency}%</span>
+                    </div>
+                  )}
+                  
+                  <div className="flex items-center gap-1.5 bg-blue-50 px-2 py-1.5 rounded-lg border border-blue-100" title="Gol segnati">
+                    <Award size={12} className="text-blue-600" />
+                    <span className="text-xs font-black text-blue-700">{selectedStats.goals}</span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 bg-emerald-50 px-2 py-1.5 rounded-lg border border-emerald-100" title="Parate effettuate">
+                    <ShieldCheck size={12} className="text-emerald-600" />
+                    <span className="text-xs font-black text-emerald-700">{selectedStats.saves}</span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 bg-orange-50 px-2 py-1.5 rounded-lg border border-orange-100" title="Tiri fuori">
+                    <Target size={12} className="text-orange-600" />
+                    <span className="text-xs font-black text-orange-700">{selectedStats.misses}</span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1.5 rounded-lg border border-slate-200" title="Palle perse">
+                    <Ban size={12} className="text-slate-600" />
+                    <span className="text-xs font-black text-slate-700">{selectedStats.lostBalls}</span>
+                  </div>
+                  
+                  {/* Sanzioni Disciplinari */}
+                  {(selectedStats.twoMins > 0 || selectedStats.yellow > 0 || selectedStats.red > 0 || selectedStats.blue > 0) && (
+                    <div className="flex items-center gap-1.5 ml-auto">
+                      {selectedStats.twoMins > 0 && (
+                        <div className="bg-amber-100 text-amber-700 px-2 py-1 rounded-lg font-black text-[10px] border border-amber-200" title="2 Minuti ricevuti">
+                          {selectedStats.twoMins}x 2'
+                        </div>
+                      )}
+                      <div className="flex gap-1">
+                        {selectedStats.yellow > 0 && <div className="w-3 h-4 bg-yellow-400 border border-slate-900 rounded-sm shadow-sm" title="Ammonizioni"></div>}
+                        {selectedStats.red > 0 && <div className="w-3 h-4 bg-red-600 border border-slate-900 rounded-sm shadow-sm" title="Espulsioni"></div>}
+                        {selectedStats.blue > 0 && <div className="w-3 h-4 bg-blue-700 border border-slate-900 rounded-sm shadow-sm" title="Cartellini Blu"></div>}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-3 gap-2">

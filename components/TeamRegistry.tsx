@@ -1,12 +1,14 @@
 
 import React, { useState, useRef, useMemo } from 'react';
-import { TeamProfile, Player } from '../types';
-import { Save, UserPlus, Trash2, Shield, UserCircle, Briefcase, AlertCircle, Layers, Lock, Unlock, Users, Hash, CheckCircle2, Star, UserCog, Upload, Image as ImageIcon, X, Info, Zap, Settings as SettingsIcon, Pencil } from 'lucide-react';
+import { TeamProfile, Player, HandballRole, UserRole } from '../types';
+import { Save, UserPlus, Trash2, Shield, UserCircle, Briefcase, AlertCircle, Layers, Lock, Unlock, Users, Hash, CheckCircle2, Star, UserCog, Upload, Image as ImageIcon, X, Info, Zap, Settings as SettingsIcon, Pencil, Check, Share2, Link as LinkIcon, ChevronLeft } from 'lucide-react';
 
 const SUGGESTED_CATEGORIES = [
   "Serie A Gold", "Serie A Silver", "Serie A1 F", "Serie A2", "Serie B", 
   "Under 20", "Under 17", "Under 15", "Under 13", "Amichevole"
 ];
+
+const ALL_ROLES = Object.values(HandballRole).filter(r => r !== HandballRole.ND);
 
 interface TeamRegistryProps { 
   profile: TeamProfile; 
@@ -22,7 +24,6 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
   const [showPinModal, setShowPinModal] = useState(false);
   const [pinEntry, setPinEntry] = useState('');
 
-  // State for editing a player
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
 
   const [teamName, setTeamName] = useState(profile.teamName);
@@ -35,6 +36,7 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
   const [newFirst, setNewFirst] = useState('');
   const [newLast, setNewLast] = useState('');
   const [newNum, setNewNum] = useState('');
+  const [newRoles, setNewRoles] = useState<HandballRole[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const numInputRef = useRef<HTMLInputElement>(null);
@@ -47,6 +49,41 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
       return nA - nB;
     });
   }, [players]);
+
+  const toggleRole = (role: HandballRole, currentList: HandballRole[], setList: (l: HandballRole[]) => void) => {
+    if (currentList.includes(role)) {
+      setList(currentList.filter(r => r !== role));
+    } else {
+      setList([...currentList, role]);
+    }
+  };
+
+  const handleShareInvite = async (e: React.MouseEvent, player: Player) => {
+    e.stopPropagation();
+    
+    const payload = btoa(JSON.stringify({
+      role: UserRole.GUEST,
+      society: teamName,
+      inviter: coachName || 'Staff Tecnico'
+    }));
+
+    const inviteUrl = `${window.location.origin}${window.location.pathname}?invite=${payload}`;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `Accesso HandballPro - ${teamName}`,
+          text: `Segui i progressi di ${player.lastName} e di tutto il team su HandballPro!`,
+          url: inviteUrl
+        });
+      } else {
+        await navigator.clipboard.writeText(inviteUrl);
+        alert("Link di accesso Visualizzatore copiato negli appunti! Invialo ai contatti dell'atleta.");
+      }
+    } catch (err) {
+      console.error("Errore condivisione", err);
+    }
+  };
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -88,13 +125,15 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
       id: Math.random().toString(36).substr(2, 9),
       firstName: newFirst.trim().toUpperCase(),
       lastName: newLast.trim().toUpperCase(),
-      number: newNum.trim()
+      number: newNum.trim(),
+      roles: newRoles.length > 0 ? newRoles : [HandballRole.ND]
     };
 
     setPlayers([...players, p]);
     setNewFirst('');
     setNewLast('');
     setNewNum('');
+    setNewRoles([]);
     setErrorMsg(null);
     numInputRef.current?.focus();
   };
@@ -107,7 +146,6 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
       return;
     }
 
-    // Check if number is taken by someone else
     if (players.some(p => p.number === editingPlayer.number.trim() && p.id !== editingPlayer.id)) {
       alert(`Il numero ${editingPlayer.number} è già assegnato a un altro giocatore.`);
       return;
@@ -117,7 +155,8 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
       ...editingPlayer,
       firstName: editingPlayer.firstName.trim().toUpperCase(),
       lastName: editingPlayer.lastName.trim().toUpperCase(),
-      number: editingPlayer.number.trim()
+      number: editingPlayer.number.trim(),
+      roles: editingPlayer.roles && editingPlayer.roles.length > 0 ? editingPlayer.roles : [HandballRole.ND]
     } : p));
     
     setEditingPlayer(null);
@@ -145,16 +184,18 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
       const nextPin = pinEntry + num;
       setPinEntry(nextPin);
       if (nextPin.length === 4) {
-        if (nextPin === (userPin || '0000')) {
+        const correctPin = userPin || '0000';
+        if (nextPin === correctPin) {
           setIsUnlocked(true);
           setShowPinModal(false);
           setPinEntry('');
+          setErrorMsg(null);
         } else {
           setErrorMsg("PIN ERRATO");
           setTimeout(() => {
              setErrorMsg(null);
              setPinEntry('');
-          }, 1000);
+          }, 1500);
         }
       }
     }
@@ -162,7 +203,6 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
 
   return (
     <div className="max-w-6xl mx-auto py-2 animate-in fade-in duration-500 relative">
-      {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 bg-white p-6 md:p-8 rounded-[2rem] border border-slate-100 shadow-sm gap-4">
         <div className="flex items-center gap-5">
           <div className="relative">
@@ -173,8 +213,8 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
                 <Shield size={32} />
               </div>
             )}
-            <div className="absolute -bottom-2 -right-2 bg-emerald-500 text-white p-1 rounded-full border-2 border-white">
-               <CheckCircle2 size={14} />
+            <div className={`absolute -bottom-2 -right-2 p-1 rounded-full border-2 border-white text-white ${isUnlocked ? 'bg-emerald-500' : 'bg-amber-500'}`}>
+               {isUnlocked ? <Unlock size={14} /> : <Lock size={14} />}
             </div>
           </div>
           <div>
@@ -215,7 +255,6 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
         </div>
       </div>
 
-      {/* TABS */}
       <div className="flex bg-white p-1.5 rounded-2xl border border-slate-100 shadow-sm mb-8 w-fit mx-auto md:mx-0">
         <button 
           onClick={() => setActiveTab('IDENTITY')}
@@ -231,8 +270,7 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
         </button>
       </div>
 
-      {/* CONTENT AREA */}
-      <div className={`grid grid-cols-1 gap-8 transition-all ${!isUnlocked && isAdmin ? 'opacity-50 grayscale-[0.5]' : ''}`}>
+      <div className={`grid grid-cols-1 gap-8 transition-all ${(!isUnlocked && isAdmin) ? 'opacity-40 grayscale-[0.8] pointer-events-none' : ''}`}>
         {activeTab === 'IDENTITY' ? (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
              <div className="lg:col-span-5 space-y-6">
@@ -261,17 +299,7 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
                            <Trash2 size={12} /> Rimuovi Logo
                         </button>
                       )}
-                      <p className="mt-6 text-center text-[10px] text-slate-400 font-medium px-4">Utilizza un logo quadrato o circolare con sfondo trasparente per un risultato ottimale.</p>
-                   </div>
-                </div>
-
-                <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 flex gap-4 shadow-inner">
-                   <Zap className="text-amber-500 shrink-0" size={24} />
-                   <div className="space-y-1">
-                      <p className="text-[11px] text-amber-900 font-black leading-tight uppercase tracking-tight">Colore Blu Default</p>
-                      <p className="text-[10px] text-amber-700 font-medium leading-relaxed">
-                        Il nome società inserito qui verrà cercato nei match del calendario. Se trovato, l'app forzerà l'associazione della tua squadra al colore <strong>Blu</strong> per garantirti coerenza visiva durante la cronaca.
-                      </p>
+                      <p className="mt-6 text-center text-[10px] text-slate-400 font-medium px-4">Scegli un logo leggibile e quadrato.</p>
                    </div>
                 </div>
              </div>
@@ -280,7 +308,7 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
                 <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden h-full">
                    <div className="bg-slate-50 px-6 py-4 border-b border-slate-100 flex items-center gap-2">
                       <SettingsIcon size={16} className="text-blue-500" />
-                      <h3 className="font-black text-slate-800 uppercase tracking-widest text-[10px]">Dati Societari & Area Tecnica</h3>
+                      <h3 className="font-black text-slate-800 uppercase tracking-widest text-[10px]">Dati Societari</h3>
                    </div>
                    <div className="p-8 space-y-6">
                       <div className="space-y-2">
@@ -288,20 +316,19 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
                         <input
                           type="text"
                           disabled={!isAdmin || !isUnlocked}
-                          className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-900 transition-all uppercase placeholder:font-normal placeholder:text-slate-300 text-lg"
+                          className="w-full px-6 py-5 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-900 transition-all uppercase placeholder:font-normal placeholder:text-slate-300 text-lg disabled:opacity-50"
                           value={teamName}
                           onChange={(e) => setTeamName(e.target.value.toUpperCase())}
                           placeholder="ES: HANDBALL CLUB MILANO"
                         />
                       </div>
-
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                          <div className="space-y-2">
                             <label className="text-[9px] font-black text-slate-400 uppercase ml-1 tracking-widest">Categoria Default</label>
                             <input
                               list="registry-categories"
                               disabled={!isAdmin || !isUnlocked}
-                              className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-700 transition-all uppercase"
+                              className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-700 transition-all uppercase disabled:opacity-50"
                               value={category}
                               onChange={(e) => setCategory(e.target.value)}
                             />
@@ -309,42 +336,6 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
                               {SUGGESTED_CATEGORIES.map(c => <option key={c} value={c} />)}
                             </datalist>
                          </div>
-                         <div className="space-y-2">
-                            <label className="text-[9px] font-black text-slate-400 uppercase ml-1 tracking-widest">Stato Account</label>
-                            <div className="w-full px-5 py-4 bg-emerald-50 border border-emerald-100 rounded-2xl flex items-center gap-2">
-                               <CheckCircle2 size={16} className="text-emerald-500" />
-                               <span className="text-[10px] font-black text-emerald-700 uppercase">Società Verificata</span>
-                            </div>
-                         </div>
-                      </div>
-
-                      <div className="pt-6 border-t border-slate-100 grid grid-cols-1 gap-6">
-                        <div className="space-y-2">
-                          <label className="text-[9px] font-black text-slate-400 uppercase ml-1 tracking-widest flex items-center gap-1.5">
-                            <Star size={12} className="text-amber-500" /> 1° Allenatore (Default)
-                          </label>
-                          <input
-                            type="text"
-                            disabled={!isAdmin || !isUnlocked}
-                            className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-700 transition-all uppercase"
-                            value={coachName}
-                            onChange={(e) => setCoachName(e.target.value.toUpperCase())}
-                            placeholder="COGNOME E NOME"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[9px] font-black text-slate-400 uppercase ml-1 tracking-widest flex items-center gap-1.5">
-                            <UserCog size={12} className="text-blue-500" /> 2° Allenatore (Default)
-                          </label>
-                          <input
-                            type="text"
-                            disabled={!isAdmin || !isUnlocked}
-                            className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none font-black text-slate-700 transition-all uppercase"
-                            value={assistantCoachName}
-                            onChange={(e) => setAssistantCoachName(e.target.value.toUpperCase())}
-                            placeholder="COGNOME E NOME"
-                          />
-                        </div>
                       </div>
                    </div>
                 </div>
@@ -366,7 +357,7 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
 
             <div className="p-8">
               {isAdmin && isUnlocked && (
-                <div className={`grid grid-cols-1 md:grid-cols-12 gap-3 mb-8 p-6 rounded-3xl border transition-all ${errorMsg ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-100'}`}>
+                <div className={`grid grid-cols-1 md:grid-cols-12 gap-6 mb-8 p-6 rounded-3xl border transition-all ${errorMsg ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-100'}`}>
                   <div className="md:col-span-2">
                     <label className="text-[9px] font-black text-slate-400 uppercase mb-1.5 block ml-1 tracking-widest text-center">N°</label>
                     <input
@@ -378,7 +369,7 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
                       onChange={(e) => setNewNum(e.target.value)}
                     />
                   </div>
-                  <div className="md:col-span-4">
+                  <div className="md:col-span-5">
                     <label className="text-[9px] font-black text-slate-400 uppercase mb-1.5 block ml-1 tracking-widest">Cognome</label>
                     <input
                       type="text"
@@ -388,7 +379,7 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
                       onChange={(e) => setNewLast(e.target.value.toUpperCase())}
                     />
                   </div>
-                  <div className="md:col-span-4">
+                  <div className="md:col-span-5">
                     <label className="text-[9px] font-black text-slate-400 uppercase mb-1.5 block ml-1 tracking-widest">Nome</label>
                     <input
                       type="text"
@@ -398,6 +389,22 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
                       onChange={(e) => setNewFirst(e.target.value.toUpperCase())}
                     />
                   </div>
+                  
+                  <div className="md:col-span-10">
+                    <label className="text-[9px] font-black text-slate-400 uppercase mb-2 block ml-1 tracking-widest">Assegna Ruoli</label>
+                    <div className="flex flex-wrap gap-2">
+                       {ALL_ROLES.map(role => (
+                         <button
+                           key={role}
+                           onClick={() => toggleRole(role, newRoles, setNewRoles)}
+                           className={`px-3 py-1.5 rounded-lg border text-[9px] font-black uppercase tracking-tight transition-all flex items-center gap-1.5 ${newRoles.includes(role) ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 'bg-white border-slate-200 text-slate-400 hover:border-blue-300'}`}
+                         >
+                           {role}
+                         </button>
+                       ))}
+                    </div>
+                  </div>
+
                   <div className="md:col-span-2 flex items-end">
                     <button
                       onClick={addPlayer}
@@ -406,11 +413,6 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
                       <UserPlus size={24} />
                     </button>
                   </div>
-                  {errorMsg && (
-                    <div className="md:col-span-12 text-[10px] font-black text-red-600 uppercase tracking-tight flex items-center gap-2 mt-2 bg-white p-3 rounded-xl border border-red-100 animate-pulse">
-                      <AlertCircle size={16} /> {errorMsg}
-                    </div>
-                  )}
                 </div>
               )}
 
@@ -419,8 +421,8 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
                   <thead>
                     <tr className="bg-slate-50">
                       <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-widest text-center w-24">N°</th>
-                      <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-widest">Atleta</th>
-                      <th className="px-8 py-5 text-right w-32"></th>
+                      <th className="px-8 py-5 text-[9px] font-black text-slate-400 uppercase tracking-widest">Atleta / Ruoli</th>
+                      <th className="px-8 py-5 text-right w-48">Azioni</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
@@ -440,34 +442,49 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
                           onClick={() => isAdmin && isUnlocked && setEditingPlayer(p)}
                           className={`hover:bg-blue-50/50 transition-colors group cursor-pointer ${editingPlayer?.id === p.id ? 'bg-blue-50' : ''}`}
                         >
-                          <td className="px-8 py-5">
-                            <div className="w-12 h-12 bg-slate-900 text-white flex items-center justify-center rounded-2xl font-black mx-auto shadow-md group-hover:bg-blue-600 transition-all text-lg">
-                              {p.number}
-                            </div>
+                          <td className="px-8 py-5 text-center">
+                            <span className="font-black text-lg text-slate-900">{p.number}</span>
                           </td>
                           <td className="px-8 py-5">
                             <div className="flex flex-col">
-                              <span className="font-black text-slate-800 uppercase tracking-tight text-base leading-none mb-1">{p.lastName}</span>
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{p.firstName}</span>
+                              <span className="font-black text-slate-800 uppercase tracking-tight text-base leading-none mb-1">{p.lastName} {p.firstName}</span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {p.roles?.map(r => (
+                                  <span key={r} className="text-[7px] font-black uppercase bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-100 tracking-tighter">
+                                    {r}
+                                  </span>
+                                ))}
+                              </div>
                             </div>
                           </td>
                           <td className="px-8 py-5 text-right">
-                            {isAdmin && isUnlocked && (
-                              <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setEditingPlayer(p); }}
-                                  className="p-3 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
-                                >
-                                  <Pencil size={18} />
-                                </button>
-                                <button
-                                  onClick={(e) => removePlayer(e, p.id)}
-                                  className="p-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                                >
-                                  <Trash2 size={18} />
-                                </button>
-                              </div>
-                            )}
+                            <div className="flex items-center justify-end gap-2">
+                              {/* Pulsante Condividi sempre sbloccato per gli admin */}
+                              <button
+                                onClick={(e) => handleShareInvite(e, p)}
+                                className="p-3 text-blue-600 hover:bg-blue-600 hover:text-white rounded-xl transition-all border border-blue-100 bg-white pointer-events-auto"
+                                title="Condividi link visualizzatore"
+                              >
+                                <Share2 size={18} />
+                              </button>
+                              
+                              {isAdmin && isUnlocked && (
+                                <>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setEditingPlayer(p); }}
+                                    className="p-3 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                                  >
+                                    <Pencil size={18} />
+                                  </button>
+                                  <button
+                                    onClick={(e) => removePlayer(e, p.id)}
+                                    className="p-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                                  >
+                                    <Trash2 size={18} />
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))
@@ -480,14 +497,68 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
         )}
       </div>
 
-      {/* EDIT PLAYER MODAL */}
+      {/* MODAL PIN - NUMERIC KEYPAD */}
+      {showPinModal && (
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-xl z-[600] flex items-center justify-center p-4">
+           <div className="bg-white rounded-[3rem] w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+              <div className="bg-amber-500 p-8 text-center text-white relative">
+                 <button onClick={() => setShowPinModal(false)} className="absolute top-6 right-6 p-2 bg-white/20 rounded-xl hover:bg-white/30 transition-colors">
+                    <X size={20} />
+                 </button>
+                 <div className="w-16 h-16 bg-white/20 rounded-3xl flex items-center justify-center mx-auto mb-4">
+                    <Lock size={32} />
+                 </div>
+                 <h3 className="font-black uppercase tracking-tight text-xl">Area Riservata</h3>
+                 <p className="text-[10px] font-bold opacity-70 uppercase tracking-widest mt-1">Inserisci PIN per sbloccare</p>
+              </div>
+
+              <div className="p-8">
+                 <div className="flex justify-center gap-4 mb-8">
+                    {[0, 1, 2, 3].map((i) => (
+                      <div 
+                        key={i} 
+                        className={`w-4 h-4 rounded-full border-2 transition-all duration-300 ${pinEntry.length > i ? 'bg-amber-500 border-amber-500 scale-125' : 'border-slate-200'}`} 
+                      />
+                    ))}
+                 </div>
+
+                 {errorMsg && (
+                   <div className="text-center mb-6 animate-bounce text-red-500 text-[10px] font-black uppercase tracking-widest">
+                      {errorMsg}
+                   </div>
+                 )}
+
+                 <div className="grid grid-cols-3 gap-3">
+                    {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '⌫'].map((btn) => (
+                      <button
+                        key={btn}
+                        onClick={() => {
+                          if (btn === 'C') setPinEntry('');
+                          else if (btn === '⌫') setPinEntry(prev => prev.slice(0, -1));
+                          else if (btn !== 'C' && btn !== '⌫') handlePinClick(btn);
+                        }}
+                        className={`h-16 rounded-2xl font-black text-xl transition-all active:scale-95 flex items-center justify-center ${
+                          btn === 'C' ? 'bg-red-50 text-red-500 text-sm' : 
+                          btn === '⌫' ? 'bg-slate-50 text-slate-400' : 
+                          'bg-slate-50 text-slate-900 hover:bg-slate-100 shadow-sm border border-slate-100'
+                        }`}
+                      >
+                         {btn}
+                      </button>
+                    ))}
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* MODAL MODIFICA ATLETA */}
       {editingPlayer && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[300] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[550] flex items-center justify-center p-4">
           <div className="bg-white rounded-[2.5rem] w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
              <div className="bg-blue-600 p-8 flex justify-between items-center text-white">
                 <div>
                    <h3 className="font-black uppercase tracking-tight text-xl">Modifica Atleta</h3>
-                   <p className="text-[10px] font-bold opacity-70 uppercase tracking-widest">Aggiorna le informazioni dell'atleta</p>
                 </div>
                 <button onClick={() => setEditingPlayer(null)} className="bg-white/20 p-2 rounded-xl hover:bg-white/30">
                    <X size={24} />
@@ -538,70 +609,6 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
                    </button>
                 </div>
              </div>
-          </div>
-        </div>
-      )}
-
-      {/* PIN PAD MODAL */}
-      {showPinModal && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[250] flex items-center justify-center p-4">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-sm p-8 shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <Lock size={32} />
-              </div>
-              <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Area Protetta</h3>
-              <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Inserisci il PIN Allenatore</p>
-            </div>
-
-            <div className="flex justify-center gap-4 mb-10">
-              {[0, 1, 2, 3].map((i) => (
-                <div 
-                  key={i} 
-                  className={`w-4 h-4 rounded-full border-2 transition-all duration-300 ${pinEntry.length > i ? 'bg-amber-500 border-amber-500 scale-125' : 'bg-slate-50 border-slate-200'}`}
-                />
-              ))}
-            </div>
-
-            {errorMsg && (
-              <div className="text-center mb-4 animate-bounce">
-                <span className="text-[10px] font-black text-red-600 uppercase tracking-widest">{errorMsg}</span>
-              </div>
-            )}
-
-            <div className="grid grid-cols-3 gap-4">
-              {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((num) => (
-                <button 
-                  key={num} 
-                  onClick={() => handlePinClick(num)}
-                  className="w-full h-16 bg-slate-50 hover:bg-slate-100 text-slate-900 rounded-2xl font-black text-xl transition-all active:scale-90"
-                >
-                  {num}
-                </button>
-              ))}
-              <button 
-                onClick={() => setPinEntry('')}
-                className="w-full h-16 flex items-center justify-center text-slate-400 hover:text-red-500 transition-all active:scale-90"
-              >
-                <X size={24} />
-              </button>
-              <button 
-                onClick={() => handlePinClick('0')}
-                className="w-full h-16 bg-slate-50 hover:bg-slate-100 text-slate-900 rounded-2xl font-black text-xl transition-all active:scale-90"
-              >
-                0
-              </button>
-              <button 
-                onClick={() => setShowPinModal(false)}
-                className="w-full h-16 flex items-center justify-center text-slate-400 hover:text-slate-900 transition-all active:scale-90"
-              >
-                <X size={24} />
-              </button>
-            </div>
-            
-            <p className="mt-8 text-center text-[9px] font-bold text-slate-300 uppercase tracking-widest leading-relaxed px-4">
-              Sblocca l'accesso per aggiungere atleti e modificare i dati societari ufficiali.
-            </p>
           </div>
         </div>
       )}

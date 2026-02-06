@@ -36,8 +36,17 @@ export interface UserProfile {
   lastName: string;
   society: string;
   role: UserRole;
+  position?: string; // Nuova proprietà per qualifica specifica (es. Vice Allenatore)
   pin?: string;
   language?: Language;
+  lastActive?: number;
+  deviceName?: string;
+}
+
+export interface Collaborator extends UserProfile {
+  joinedAt: string;
+  isOnline?: boolean;
+  deviceType?: 'Mobile' | 'Desktop' | 'Tablet' | 'Unknown';
 }
 
 export interface Player {
@@ -45,7 +54,8 @@ export interface Player {
   firstName: string;
   lastName: string;
   number: string;
-  role?: string; 
+  roles?: HandballRole[]; 
+  role?: string;
 }
 
 export interface TeamProfile {
@@ -54,7 +64,7 @@ export interface TeamProfile {
   assistantCoachName?: string;
   category: string;
   players: Player[];
-  logo?: string; // Base64 string o URL
+  logo?: string; 
 }
 
 export interface MatchEvent {
@@ -109,7 +119,7 @@ export interface TrainingEvaluation {
   playerName: string;
   isPresent: boolean;
   role: HandballRole | string;
-  rating: number; // 1-5 stars
+  rating: number; 
   notes: string;
 }
 

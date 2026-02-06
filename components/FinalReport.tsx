@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Match, EventType, Player, Language } from '../types';
 import { generateMatchReport } from '../services/geminiService';
-import { FileText, Download, Share2, Sparkles, RefreshCw, Trophy, FileDown, Target, Ban, Zap, Users, User, Clock, Shield } from 'lucide-react';
+import { FileText, Download, Share2, Sparkles, RefreshCw, Trophy, FileDown, Target, Ban, Zap, Users, User, Clock, Shield, UserCog, Star } from 'lucide-react';
 
 interface FinalReportProps {
   match: Match;
@@ -61,7 +61,8 @@ const FinalReport: React.FC<FinalReportProps> = ({ match, onClose, t = {}, langu
         saves: getCount('HOME', EventType.SAVE),
         sanzioni: getSanzioni('HOME'),
         totalShots: getCount('HOME', EventType.GOAL) + getCount('HOME', EventType.MISS),
-        playerGoals: getPlayerGoals('HOME', match.homeRoster)
+        playerGoals: getPlayerGoals('HOME', match.homeRoster),
+        staff: match.homeStaff
       },
       away: {
         goals: getCount('AWAY', EventType.GOAL),
@@ -70,7 +71,8 @@ const FinalReport: React.FC<FinalReportProps> = ({ match, onClose, t = {}, langu
         saves: getCount('AWAY', EventType.SAVE),
         sanzioni: getSanzioni('AWAY'),
         totalShots: getCount('AWAY', EventType.GOAL) + getCount('AWAY', EventType.MISS),
-        playerGoals: getPlayerGoals('AWAY', match.awayRoster)
+        playerGoals: getPlayerGoals('AWAY', match.awayRoster),
+        staff: match.awayStaff
       }
     };
   }, [match]);
@@ -128,6 +130,36 @@ const FinalReport: React.FC<FinalReportProps> = ({ match, onClose, t = {}, langu
             ))
           )}
         </div>
+      </div>
+    );
+  };
+
+  const renderStaffSection = (title: string, staff: Player[], color: 'blue' | 'red') => {
+    const lightBg = color === 'blue' ? 'bg-blue-50/30' : 'bg-red-50/30';
+    const accentText = color === 'blue' ? 'text-blue-600' : 'text-red-600';
+
+    return (
+      <div className={`${lightBg} p-4 rounded-xl border border-slate-100 mb-4`}>
+         <h4 className={`text-[9px] font-black uppercase tracking-widest mb-3 flex items-center gap-2 ${accentText}`}>
+           <UserCog size={12} /> Area Tecnica - {title}
+         </h4>
+         <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {staff.length === 0 ? (
+              <p className="text-[9px] text-slate-300 font-bold uppercase italic">Nessun membro staff registrato</p>
+            ) : (
+              staff.map(s => (
+                <div key={s.id} className="bg-white/50 p-2 rounded-lg border border-slate-50 flex items-center gap-2">
+                   <div className={`p-1 rounded bg-white border border-slate-100 ${accentText}`}>
+                      {s.role?.toUpperCase().includes("ALLENATORE") ? <Star size={10} fill="currentColor" /> : <Shield size={10} />}
+                   </div>
+                   <div className="min-w-0">
+                      <p className="text-[10px] font-black text-slate-800 uppercase leading-none mb-0.5 truncate">{s.lastName} {s.firstName}</p>
+                      <p className={`text-[7px] font-black uppercase tracking-tighter ${accentText}`}>{s.role}</p>
+                   </div>
+                </div>
+              ))
+            )}
+         </div>
       </div>
     );
   };
@@ -194,9 +226,15 @@ const FinalReport: React.FC<FinalReportProps> = ({ match, onClose, t = {}, langu
             <div className="space-y-4">
               <h3 className="text-xs font-black text-slate-800 flex items-center gap-2 uppercase tracking-widest">
                 <Users size={16} className="text-blue-600" />
-                Classifica Marcatori
+                Area Tecnica & Marcatori
               </h3>
               <div className="grid grid-cols-1 gap-4">
+                {/* Sezione Staff - Novità */}
+                <div className="space-y-0">
+                  {renderStaffSection(match.homeTeamName, stats.home.staff, 'blue')}
+                  {renderStaffSection(match.awayTeamName, stats.away.staff, 'red')}
+                </div>
+                
                 {renderScorerChart(match.homeTeamName, stats.home.playerGoals, 'blue')}
                 {renderScorerChart(match.awayTeamName, stats.away.playerGoals, 'red')}
               </div>

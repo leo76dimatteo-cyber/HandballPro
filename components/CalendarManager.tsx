@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { ScheduledMatch } from '../types';
 import { storage } from '../services/storageService';
-import { Calendar, Plus, Trash2, Play, Clock, MapPin, Layers, X, ArrowLeft, Share2, FileJson } from 'lucide-react';
+import { Calendar, Plus, Trash2, Play, Clock, MapPin, Layers, X, ArrowLeft, Share2, FileJson, Info } from 'lucide-react';
 
 interface CalendarManagerProps {
   matches: ScheduledMatch[];
@@ -12,10 +12,11 @@ interface CalendarManagerProps {
   onBack: () => void;
   canEdit: boolean;
   suggestedCategories: string[];
+  t: any;
 }
 
 const CalendarManager: React.FC<CalendarManagerProps> = ({ 
-  matches, onAdd, onDelete, onStart, onBack, canEdit, suggestedCategories 
+  matches, onAdd, onDelete, onStart, onBack, canEdit, suggestedCategories, t
 }) => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newMatch, setNewMatch] = useState<Partial<ScheduledMatch>>({
@@ -225,6 +226,16 @@ const CalendarManager: React.FC<CalendarManagerProps> = ({
           ))}
         </div>
       )}
+
+      <div className="mt-8 bg-blue-50 p-6 rounded-3xl border border-blue-100 flex items-start gap-4 shadow-inner">
+         <div className="p-3 bg-blue-100 text-blue-600 rounded-2xl shrink-0"><Info size={24} /></div>
+         <div>
+            <h4 className="font-black text-blue-900 uppercase tracking-tight text-sm">Guida Calendario</h4>
+            <p className="text-[11px] text-blue-700 font-medium leading-relaxed mt-1">
+               Pianifica le prossime sfide inserendo <strong>Data</strong>, <strong>Ora</strong> e <strong>Team</strong>. Le gare salvate rimarranno in questo archivio finché non deciderai di avviarle tramite il tasto "Vai a Setup", che popolerà automaticamente i campi della nuova partita. Ti consigliamo di esportare periodicamente il calendario per sicurezza.
+            </p>
+         </div>
+      </div>
     </div>
   );
 };
