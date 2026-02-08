@@ -15,7 +15,12 @@ interface Marker {
   color: 'blue' | 'red' | 'yellow';
 }
 
-const TacticalBoard: React.FC = () => {
+interface TacticalBoardProps {
+  t?: any;
+}
+
+// Fixed TypeScript inference issue by casting default empty object to any
+const TacticalBoard: React.FC<TacticalBoardProps> = ({ t = {} as any }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [viewMode, setViewMode] = useState<'full' | 'half'>('full');
@@ -33,7 +38,6 @@ const TacticalBoard: React.FC = () => {
       if (canvasRef.current && containerRef.current) {
         const { width } = containerRef.current.getBoundingClientRect();
         canvasRef.current.width = width;
-        // Proporzioni: 2:1 per campo intero, circa 1.2:1 per metà campo per avere più spazio verticale
         canvasRef.current.height = viewMode === 'full' ? width * 0.5 : width * 0.8;
         drawCourt();
       }
@@ -53,76 +57,52 @@ const TacticalBoard: React.FC = () => {
     const w = canvas.width;
     const h = canvas.height;
 
-    // Sfondo Campo
     ctx.fillStyle = '#1e293b'; 
     ctx.fillRect(0, 0, w, h);
 
     if (viewMode === 'full') {
-      // Divisione cromatica metà campo
-      ctx.fillStyle = '#1e293b'; // Sinistra
+      ctx.fillStyle = '#1e293b';
       ctx.fillRect(0, 0, w / 2, h);
-      ctx.fillStyle = '#0f172a'; // Destra
+      ctx.fillStyle = '#0f172a';
       ctx.fillRect(w / 2, 0, w / 2, h);
-
-      // Linee perimetrali
       ctx.strokeStyle = 'rgba(255,255,255,0.8)';
       ctx.lineWidth = 2;
       ctx.strokeRect(10, 10, w - 20, h - 20);
-
-      // Linea di metà campo
       ctx.beginPath();
       ctx.moveTo(w / 2, 10);
       ctx.lineTo(w / 2, h - 10);
       ctx.stroke();
-
-      // Cerchio di centrocampo
       ctx.beginPath();
       ctx.arc(w / 2, h / 2, h * 0.15, 0, Math.PI * 2);
       ctx.stroke();
-      
-      // Punto centrale
       ctx.beginPath();
       ctx.arc(w / 2, h / 2, 4, 0, Math.PI * 2);
       ctx.fillStyle = '#ffffff';
       ctx.fill();
-
-      // Disegna aree per entrambi i lati
       drawSide(true, ctx, w, h);
       drawSide(false, ctx, w, h);
     } else {
-      // MODALITÀ METÀ CAMPO
       ctx.fillStyle = '#0f172a';
       ctx.fillRect(0, 0, w, h);
-
       ctx.strokeStyle = 'rgba(255,255,255,0.8)';
       ctx.lineWidth = 2;
-      
-      // Perimetro (senza il lato di fondo che è la linea mediana)
       ctx.beginPath();
-      ctx.moveTo(10, h - 10); // Angolo basso sx (mediana)
-      ctx.lineTo(10, 10);     // Angolo alto sx
-      ctx.lineTo(w - 10, 10); // Angolo alto dx
-      ctx.lineTo(w - 10, h - 10); // Angolo basso dx (mediana)
+      ctx.moveTo(10, h - 10);
+      ctx.lineTo(10, 10);
+      ctx.lineTo(w - 10, 10);
+      ctx.lineTo(w - 10, h - 10);
       ctx.stroke();
-
-      // Linea mediana (basso)
       ctx.beginPath();
       ctx.moveTo(10, h - 10);
       ctx.lineTo(w - 10, h - 10);
       ctx.stroke();
-
-      // Cerchio di centrocampo (solo metà)
       ctx.beginPath();
       ctx.arc(w / 2, h - 10, w * 0.12, Math.PI, 0);
       ctx.stroke();
-
-      // Punto di battuta
       ctx.beginPath();
       ctx.arc(w / 2, h - 10, 5, 0, Math.PI * 2);
       ctx.fillStyle = '#ffffff';
       ctx.fill();
-
-      // Area di rigore e porta (zoomate)
       drawSideHalf(ctx, w, h);
     }
   };
@@ -130,27 +110,19 @@ const TacticalBoard: React.FC = () => {
   const drawSide = (isLeft: boolean, ctx: CanvasRenderingContext2D, w: number, h: number) => {
     const startX = isLeft ? 10 : w - 10;
     const dir = isLeft ? 1 : -1;
-    
-    // Area 6m
     ctx.beginPath();
     ctx.arc(startX, h / 2, h * 0.3, -Math.PI / 2, Math.PI / 2, !isLeft);
     ctx.stroke();
-
-    // Linea 9m (Tratteggiata)
     ctx.setLineDash([5, 5]);
     ctx.beginPath();
     ctx.arc(startX, h / 2, h * 0.45, -Math.PI / 2, Math.PI / 2, !isLeft);
     ctx.stroke();
     ctx.setLineDash([]);
-
-    // Linea 7m
     ctx.beginPath();
     const penaltyX = startX + (dir * h * 0.35);
     ctx.moveTo(penaltyX, h / 2 - 10);
     ctx.lineTo(penaltyX, h / 2 + 10);
     ctx.stroke();
-
-    // Porta
     ctx.lineWidth = 4;
     ctx.strokeStyle = '#ffffff';
     ctx.strokeRect(isLeft ? 5 : w - 15, h / 2 - (h * 0.15) / 2, 10, h * 0.15);
@@ -159,26 +131,19 @@ const TacticalBoard: React.FC = () => {
   };
 
   const drawSideHalf = (ctx: CanvasRenderingContext2D, w: number, h: number) => {
-    // Area 6m (In alto)
     ctx.beginPath();
     ctx.arc(w / 2, 10, h * 0.4, 0, Math.PI);
     ctx.stroke();
-
-    // Linea 9m (In alto, tratteggiata)
     ctx.setLineDash([8, 8]);
     ctx.beginPath();
     ctx.arc(w / 2, 10, h * 0.6, 0, Math.PI);
     ctx.stroke();
     ctx.setLineDash([]);
-
-    // Linea 7m
     ctx.beginPath();
     const penaltyY = 10 + (h * 0.47);
     ctx.moveTo(w / 2 - 15, penaltyY);
     ctx.lineTo(w / 2 + 15, penaltyY);
     ctx.stroke();
-
-    // Porta (In alto)
     ctx.lineWidth = 5;
     ctx.strokeStyle = '#ffffff';
     ctx.strokeRect(w / 2 - (w * 0.15) / 2, 5, w * 0.15, 10);
@@ -205,8 +170,6 @@ const TacticalBoard: React.FC = () => {
       ctx.moveTo(pos.x, pos.y);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      
-      // Colore gomma intelligente basato sulla posizione e modalità
       if (tool === 'eraser') {
         if (viewMode === 'full') {
           ctx.strokeStyle = pos.x < canvasRef.current!.width / 2 ? '#1e293b' : '#0f172a';
@@ -216,7 +179,6 @@ const TacticalBoard: React.FC = () => {
       } else {
         ctx.strokeStyle = color;
       }
-      
       ctx.lineWidth = tool === 'eraser' ? 30 : 3;
     }
   };
@@ -275,7 +237,7 @@ const TacticalBoard: React.FC = () => {
   };
 
   const clearBoard = () => {
-    if (confirm("Cancellare tutta la lavagna? I marcatori e il disegno verranno rimossi.")) {
+    if (confirm("Clear tactical board?")) {
       drawCourt();
       setMarkers([]);
       setHistory([]);
@@ -286,15 +248,12 @@ const TacticalBoard: React.FC = () => {
   const downloadBoard = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = canvas.width;
     tempCanvas.height = canvas.height;
     const tCtx = tempCanvas.getContext('2d');
     if (!tCtx) return;
-
     tCtx.drawImage(canvas, 0, 0);
-    
     markers.forEach(m => {
       tCtx.beginPath();
       tCtx.arc(m.x, m.y, 16, 0, Math.PI * 2);
@@ -309,9 +268,8 @@ const TacticalBoard: React.FC = () => {
       tCtx.textBaseline = 'middle';
       tCtx.fillText(m.label, m.x, m.y);
     });
-
     const link = document.createElement('a');
-    link.download = `Schema_${viewMode === 'full' ? 'Completo' : 'MetaCampo'}_${Date.now()}.png`;
+    link.download = `Tactical_Board_${Date.now()}.png`;
     link.href = tempCanvas.toDataURL('image/png');
     link.click();
   };
@@ -320,135 +278,43 @@ const TacticalBoard: React.FC = () => {
     <div className="flex flex-col gap-4 animate-in fade-in duration-500">
       <div className="bg-slate-900 p-3 md:p-4 rounded-3xl border border-slate-700 shadow-2xl flex flex-wrap items-center justify-between gap-3">
         
-        {/* View Mode Toggle */}
         <div className="flex items-center gap-1 bg-slate-800 p-1 rounded-2xl">
            <button 
              onClick={() => setViewMode('full')}
              className={`px-4 py-2.5 rounded-xl transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest ${viewMode === 'full' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}
            >
-             <Maximize2 size={16} /> Intero
+             <Maximize2 size={16} /> {t.fullTeam}
            </button>
            <button 
              onClick={() => setViewMode('half')}
              className={`px-4 py-2.5 rounded-xl transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest ${viewMode === 'half' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}
            >
-             <Minimize2 size={16} /> Metà
+             <Minimize2 size={16} /> {t.halfTeam}
            </button>
         </div>
 
-        {/* Tools */}
         <div className="flex items-center gap-2 bg-slate-800 p-1 rounded-2xl">
-          <button 
-            onClick={() => setTool('pencil')}
-            className={`p-2.5 rounded-xl transition-all ${tool === 'pencil' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}
-            title="Matita"
-          >
-            <Pencil size={18} />
-          </button>
-          <button 
-            onClick={() => setTool('marker')}
-            className={`p-2.5 rounded-xl transition-all ${tool === 'marker' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}
-            title="Posiziona Giocatore"
-          >
-            <Users size={18} />
-          </button>
-          <button 
-            onClick={() => setTool('eraser')}
-            className={`p-2.5 rounded-xl transition-all ${tool === 'eraser' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}
-            title="Gomma"
-          >
-            <Eraser size={18} />
-          </button>
+          <button onClick={() => setTool('pencil')} className={`p-2.5 rounded-xl transition-all ${tool === 'pencil' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}><Pencil size={18} /></button>
+          <button onClick={() => setTool('marker')} className={`p-2.5 rounded-xl transition-all ${tool === 'marker' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}><Users size={18} /></button>
+          <button onClick={() => setTool('eraser')} className={`p-2.5 rounded-xl transition-all ${tool === 'eraser' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}><Eraser size={18} /></button>
         </div>
 
-        {/* Dynamic Options */}
-        {tool === 'pencil' && (
-          <div className="flex items-center gap-2 bg-slate-800 px-3 py-2 rounded-2xl">
-            {['#ffffff', '#facc15', '#3b82f6', '#ef4444', '#22c55e'].map(c => (
-              <button 
-                key={c}
-                onClick={() => setColor(c)}
-                className={`w-6 h-6 rounded-full border-2 transition-transform ${color === c ? 'scale-110 border-white shadow-lg' : 'border-transparent opacity-40 hover:opacity-100'}`}
-                style={{ backgroundColor: c }}
-              />
-            ))}
-          </div>
-        )}
-
-        {tool === 'marker' && (
-          <div className="flex items-center gap-3 bg-slate-800 px-4 py-1.5 rounded-2xl">
-             <div className="flex gap-1.5">
-                <button onClick={() => setMarkerColor('blue')} className={`w-7 h-7 rounded-lg bg-blue-500 border-2 ${markerColor === 'blue' ? 'border-white scale-110' : 'border-transparent opacity-40'}`} />
-                <button onClick={() => setMarkerColor('red')} className={`w-7 h-7 rounded-lg bg-red-500 border-2 ${markerColor === 'red' ? 'border-white scale-110' : 'border-transparent opacity-40'}`} />
-             </div>
-             <div className="h-6 w-px bg-slate-700 mx-1"></div>
-             <div className="flex items-center gap-2">
-                <span className="text-[10px] font-black text-slate-500 uppercase">N°:</span>
-                <input 
-                  type="number" 
-                  className="w-10 bg-slate-900 border-none text-white text-center font-black rounded-lg py-1 text-xs"
-                  value={nextMarkerNum}
-                  onChange={e => setNextMarkerNum(parseInt(e.target.value) || 1)}
-                />
-             </div>
-          </div>
-        )}
-
-        {/* Global Actions */}
         <div className="flex items-center gap-2">
-          <button onClick={clearBoard} className="p-2.5 text-slate-400 hover:text-red-400 transition-colors" title="Svuota Tutto"><Trash2 size={20} /></button>
-          <button onClick={downloadBoard} className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 shadow-lg shadow-emerald-900/20 active:scale-95 transition-all">
-             <Download size={16} /> Esporta
+          <button onClick={clearBoard} className="p-2.5 text-slate-400 hover:text-red-400 transition-colors"><Trash2 size={20} /></button>
+          <button onClick={downloadBoard} className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 shadow-lg active:scale-95 transition-all">
+             <Download size={16} /> {t.saveSchema}
           </button>
         </div>
       </div>
 
-      {/* Canvas Area */}
       <div ref={containerRef} className="relative w-full rounded-[2.5rem] overflow-hidden border-4 border-slate-800 shadow-2xl touch-none bg-slate-800 transition-all duration-300">
-        <canvas 
-          ref={canvasRef}
-          onMouseDown={startDrawing}
-          onMouseMove={draw}
-          onMouseUp={stopDrawing}
-          onMouseOut={stopDrawing}
-          onTouchStart={startDrawing}
-          onTouchMove={draw}
-          onTouchEnd={stopDrawing}
-          className={`w-full h-auto cursor-crosshair block ${tool === 'marker' ? 'cursor-copy' : ''}`}
-        />
-        
-        {/* Markers Overlay */}
+        <canvas ref={canvasRef} onMouseDown={startDrawing} onMouseMove={draw} onMouseUp={stopDrawing} onMouseOut={stopDrawing} onTouchStart={startDrawing} onTouchMove={draw} onTouchEnd={stopDrawing} className={`w-full h-auto cursor-crosshair block ${tool === 'marker' ? 'cursor-copy' : ''}`} />
         {markers.map(m => (
-          <div 
-            key={m.id}
-            style={{ left: m.x, top: m.y }}
-            className={`absolute -translate-x-1/2 -translate-y-1/2 w-8 h-8 md:w-10 md:h-10 rounded-full border-2 border-white shadow-xl flex items-center justify-center font-black text-white text-xs md:text-sm cursor-pointer transition-transform hover:scale-110 group ${m.color === 'blue' ? 'bg-blue-500 shadow-blue-500/30' : m.color === 'red' ? 'bg-red-500 shadow-red-500/30' : 'bg-amber-500 shadow-amber-500/30'}`}
-            onClick={() => removeMarker(m.id)}
-          >
+          <div key={m.id} style={{ left: m.x, top: m.y }} className={`absolute -translate-x-1/2 -translate-y-1/2 w-8 h-8 md:w-10 md:h-10 rounded-full border-2 border-white shadow-xl flex items-center justify-center font-black text-white text-xs md:text-sm cursor-pointer transition-transform hover:scale-110 group ${m.color === 'blue' ? 'bg-blue-500 shadow-blue-500/30' : m.color === 'red' ? 'bg-red-500 shadow-red-500/30' : 'bg-amber-500 shadow-amber-500/30'}`} onClick={() => removeMarker(m.id)}>
             {m.label}
-            <div className="absolute -top-1 -right-1 bg-slate-900 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-               <X size={10} />
-            </div>
+            <div className="absolute -top-1 -right-1 bg-slate-900 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"><X size={10} /></div>
           </div>
         ))}
-
-        {markers.length === 0 && (
-           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 pointer-events-none text-white/10 flex flex-col items-center gap-2">
-              <Layout size={48} />
-              <p className="text-[9px] font-black uppercase tracking-[0.25em]">Lavagna {viewMode === 'full' ? 'Campionato' : 'Tattica'}</p>
-           </div>
-        )}
-      </div>
-      
-      {/* Help Box */}
-      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-start gap-4">
-         <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl"><Info size={24} /></div>
-         <div className="space-y-1">
-            <h4 className="font-black text-slate-800 uppercase tracking-tight text-sm">Visualizzazione Campo</h4>
-            <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-               Usa il tasto <strong>Intero</strong> per visualizzare il campo 40x20m completo (ottimo per contropiedi e transizioni). Scegli <strong>Metà</strong> per focalizzarti sulla fase di attacco o difesa schierata, con una visuale ingrandita dell'area dei 6 metri e dei 9 metri. Cambiare visualizzazione pulirà i disegni attuali per garantire la coerenza delle proporzioni.
-            </p>
-         </div>
       </div>
     </div>
   );

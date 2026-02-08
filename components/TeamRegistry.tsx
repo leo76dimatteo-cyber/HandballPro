@@ -222,7 +222,7 @@ const TeamRegistry: React.FC<TeamRegistryProps> = ({ profile, onSave, isAdmin = 
               {teamName || 'Profilo Società'}
             </h2>
             <div className="flex items-center gap-2 mt-1">
-               <span className="text-[8px] font-black bg-blue-600 text-white px-2 py-0.5 rounded-full uppercase tracking-widest">HandballPro v.02</span>
+               <span className="text-[8px] font-black bg-blue-600 text-white px-2 py-0.5 rounded-full uppercase tracking-widest">HandballPro 3.0</span>
                {isUnlocked ? (
                  <span className="text-[8px] font-black bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded-full uppercase tracking-widest flex items-center gap-1"><Unlock size={8} /> Sessione Sbloccata</span>
                ) : (

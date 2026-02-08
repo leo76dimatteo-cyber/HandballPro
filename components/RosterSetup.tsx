@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Player, HandballRole } from '../types';
-import { UserPlus, Trash2, Download, Hash, Search, CheckCircle2, Users, User, ChevronDown, ChevronUp, UserCog, Star, Shield, ClipboardList, X, Check, Filter, Zap, UserCheck, Pencil, BookOpen, Info } from 'lucide-react';
+import { Player, HandballRole, TeamProfile } from '../types';
+import { UserPlus, Trash2, Download, Hash, Search, CheckCircle2, Users, User, ChevronDown, ChevronUp, UserCog, Star, Shield, ClipboardList, X, Check, Filter, Zap, UserCheck, Pencil, BookOpen, Info, Layers } from 'lucide-react';
 import { storage } from '../services/storageService';
 
 const ALL_HANDBALL_ROLES = Object.values(HandballRole).filter(r => r !== HandballRole.ND);
@@ -39,9 +39,7 @@ interface RosterSetupProps {
   onUpdate: (roster: Player[]) => void;
   onUpdateStaff: (staff: Player[]) => void;
   accentColor?: 'blue' | 'red';
-  onImportRegistry?: () => void;
-  hasRegistry?: boolean;
-  registryPlayers?: Player[];
+  allRegistries?: TeamProfile[];
   t: any;
 }
 
@@ -52,9 +50,7 @@ const RosterSetup: React.FC<RosterSetupProps> = ({
   onUpdate, 
   onUpdateStaff,
   accentColor = 'blue',
-  onImportRegistry,
-  hasRegistry = false,
-  registryPlayers = [],
+  allRegistries = [],
   t
 }) => {
   const [mode, setMode] = useState<'PLAYER' | 'STAFF'>('PLAYER');
@@ -70,34 +66,39 @@ const RosterSetup: React.FC<RosterSetupProps> = ({
   
   // Modal State
   const [showImportModal, setShowImportModal] = useState(false);
+  const [selectedRegistryIndex, setSelectedRegistryIndex] = useState<number>(-1);
   const [modalSearch, setModalSearch] = useState('');
   const [selectedInModal, setSelectedInModal] = useState<Set<string>>(new Set());
   const [importStaff, setImportStaff] = useState(true);
 
   const isBlue = accentColor === 'blue';
-  const isOpponent = accentColor === 'red';
+
+  // Tentativo di pre-selezionare l'anagrafica che corrisponde al nome del team
+  useEffect(() => {
+    if (showImportModal && selectedRegistryIndex === -1 && allRegistries.length > 0) {
+      const matchIdx = allRegistries.findIndex(r => r.teamName.toUpperCase() === teamName.toUpperCase());
+      if (matchIdx !== -1) {
+        setSelectedRegistryIndex(matchIdx);
+      } else {
+        setSelectedRegistryIndex(0);
+      }
+    }
+  }, [showImportModal, teamName, allRegistries]);
+
+  const currentRegistry = selectedRegistryIndex !== -1 ? allRegistries[selectedRegistryIndex] : null;
 
   const availableFromRegistry = useMemo(() => {
-    return registryPlayers.filter(p => !roster.find(existing => existing.number === p.number));
-  }, [registryPlayers, roster]);
+    if (!currentRegistry) return [];
+    return currentRegistry.players.filter(p => !roster.find(existing => existing.number === p.number));
+  }, [currentRegistry, roster]);
 
   const filteredRegistryForModal = useMemo(() => {
-    return registryPlayers.filter(p => 
+    if (!currentRegistry) return [];
+    return currentRegistry.players.filter(p => 
       p.lastName.toLowerCase().includes(modalSearch.toLowerCase()) || 
       p.number.includes(modalSearch)
     );
-  }, [registryPlayers, modalSearch]);
-
-  useEffect(() => {
-    if (!editingId && mode === 'PLAYER' && newNumber) {
-      const found = registryPlayers.find(p => p.number === newNumber);
-      if (found) {
-        setNewFirstName(found.firstName);
-        setNewLastName(found.lastName);
-        if (found.roles) setNewRoles(found.roles);
-      }
-    }
-  }, [newNumber, registryPlayers, mode, editingId]);
+  }, [currentRegistry, modalSearch]);
 
   const togglePlayerRole = (role: HandballRole) => {
     setNewRoles(prev => 
@@ -163,21 +164,19 @@ const RosterSetup: React.FC<RosterSetupProps> = ({
   };
 
   const confirmModalImport = (forceAll: boolean = false) => {
-    const idsToImport = forceAll ? new Set(registryPlayers.map(p => p.id)) : selectedInModal;
-    const toImport = registryPlayers.filter(p => idsToImport.has(p.id));
+    if (!currentRegistry) return;
+    const idsToImport = forceAll ? new Set(currentRegistry.players.map(p => p.id)) : selectedInModal;
+    const toImport = currentRegistry.players.filter(p => idsToImport.has(p.id));
     const newRoster = [...roster];
     toImport.forEach(p => { if (!newRoster.find(existing => existing.number === p.number)) newRoster.push({ ...p, id: Math.random().toString(36).substr(2, 9) }); });
     onUpdate(newRoster);
     if (importStaff || forceAll) {
-      const registry = storage.getAllRegistries().find(r => r.teamName.toUpperCase() === teamName.toUpperCase()) || storage.getAllRegistries()[0];
-      if (registry) {
-        const newStaff = [...staff];
-        if (registry.coachName) {
-          const coachNameUpper = registry.coachName.toUpperCase();
-          if (!newStaff.find(s => s.lastName === coachNameUpper)) newStaff.push({ id: 'c1-'+Date.now(), firstName: '', lastName: coachNameUpper, number: 'S', role: '1° ALLENATORE' });
-        }
-        onUpdateStaff(newStaff);
+      const newStaff = [...staff];
+      if (currentRegistry.coachName) {
+        const coachNameUpper = currentRegistry.coachName.toUpperCase();
+        if (!newStaff.find(s => s.lastName === coachNameUpper)) newStaff.push({ id: 'c1-'+Date.now(), firstName: '', lastName: coachNameUpper, number: 'S', role: '1° ALLENATORE' });
       }
+      onUpdateStaff(newStaff);
     }
     setShowImportModal(false); setSelectedInModal(new Set()); setModalSearch('');
   };
@@ -193,7 +192,7 @@ const RosterSetup: React.FC<RosterSetupProps> = ({
       <div className={`${isBlue ? 'bg-blue-600' : 'bg-red-600'} px-5 py-4 flex items-center justify-between cursor-pointer`} onClick={() => setIsExpanded(!isExpanded)}>
         <div className="flex flex-col">
           <h3 className="text-sm md:text-base font-black text-white flex items-center gap-2 uppercase tracking-tight truncate pr-2 max-w-[200px]">{teamName}</h3>
-          <span className="text-[8px] md:text-[9px] font-bold text-white/70 uppercase tracking-widest">{isBlue ? 'Home' : 'Away'} Setup</span>
+          <span className="text-[8px] md:text-[9px] font-bold text-white/70 uppercase tracking-widest">{isBlue ? 'Casa' : 'Trasferta'} Setup</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 bg-black/20 px-2 py-1 rounded-lg border border-white/10">
@@ -214,7 +213,7 @@ const RosterSetup: React.FC<RosterSetupProps> = ({
                <button onClick={() => { if(!editingId) setMode('PLAYER'); }} className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${mode === 'PLAYER' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'} ${editingId ? 'opacity-50 cursor-not-allowed' : ''}`}><Users size={14} /> Atleti</button>
                <button onClick={() => { if(!editingId) setMode('STAFF'); }} className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${mode === 'STAFF' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'} ${editingId ? 'opacity-50 cursor-not-allowed' : ''}`}><UserCog size={14} /> Area Tecnica</button>
             </div>
-            {hasRegistry && !editingId && (
+            {allRegistries.length > 0 && !editingId && (
               <button onClick={() => setShowImportModal(true)} className={`w-full py-2.5 rounded-xl border flex items-center justify-center gap-2 font-black text-[10px] uppercase tracking-widest transition-all shadow-sm ${isBlue ? 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100' : 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100'}`}><Download size={14} /> Importa da Anagrafica</button>
             )}
           </div>
@@ -254,7 +253,7 @@ const RosterSetup: React.FC<RosterSetupProps> = ({
             </div>
           </div>
 
-          {mode === 'PLAYER' && hasRegistry && availableFromRegistry.length > 0 && !editingId && (
+          {mode === 'PLAYER' && availableFromRegistry.length > 0 && !editingId && (
             <div className="mb-4">
               <div className="flex items-center justify-between mb-1.5 px-1"><label className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><Users size={10} /> Suggeriti</label><button onClick={() => setShowQuickAdd(!showQuickAdd)} className="text-[8px] font-black text-blue-600 uppercase">{showQuickAdd ? 'Chiudi' : 'Vedi Tutti'}</button></div>
               <div className={`overflow-x-auto py-1 no-scrollbar flex items-center gap-2 ${showQuickAdd ? 'flex-wrap' : ''}`}>{availableFromRegistry.map((ap, idx) => { if (!showQuickAdd && idx > 8) return null; return (<button key={ap.id} onClick={() => handleQuickAddPlayer(ap)} className="shrink-0 flex flex-col items-center justify-center bg-white border border-slate-100 rounded-lg py-1.5 px-2.5 hover:bg-blue-50 transition-all group min-w-[50px] shadow-sm"><span className="text-[10px] font-black text-slate-700 group-hover:text-blue-600">{ap.number}</span><span className="text-[6px] font-bold text-slate-400 uppercase truncate w-full text-center">{ap.lastName.split(' ')[0]}</span></button>); })}</div>
@@ -283,8 +282,42 @@ const RosterSetup: React.FC<RosterSetupProps> = ({
       {showImportModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
           <div className="bg-white rounded-[2rem] w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden">
-            <div className={`p-6 text-white flex justify-between items-center ${isBlue ? 'bg-blue-600' : 'bg-red-600'}`}><div><h3 className="font-black uppercase tracking-widest text-sm">Importa da Anagrafica</h3><p className="text-[10px] font-bold opacity-70">Seleziona chi convocare per questo match</p></div><button onClick={() => setShowImportModal(false)} className="bg-white/20 p-2 rounded-xl hover:bg-white/30 transition-colors"><X size={20} /></button></div>
-            <div className="p-5 space-y-4 flex-1 flex flex-col min-h-0"><button onClick={() => confirmModalImport(true)} className={`w-full py-4 rounded-2xl flex items-center justify-center gap-3 font-black text-xs uppercase tracking-widest transition-all shadow-lg border-2 border-transparent hover:scale-[1.02] active:scale-95 mb-2 ${isBlue ? 'bg-blue-900 text-white shadow-blue-100' : 'bg-red-900 text-white shadow-red-100'}`}><Zap size={18} className="text-amber-400 fill-amber-400" /> Importa Tutto il Team (Atleti + Staff)</button><div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input type="text" placeholder="Cerca per cognome o numero..." className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-sm" value={modalSearch} onChange={e => setModalSearch(e.target.value)} /></div><div className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-2"><div onClick={() => setImportStaff(!importStaff)} className={`p-3 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between ${importStaff ? 'border-amber-400 bg-amber-50' : 'border-slate-100 bg-white'}`}><div className="flex items-center gap-3"><div className={`p-2 rounded-xl ${importStaff ? 'bg-amber-400 text-white' : 'bg-slate-100 text-slate-400'}`}><UserCog size={18} /></div><div><p className="text-xs font-black uppercase text-slate-800 leading-tight">Area Tecnica</p><p className="text-[9px] font-medium text-slate-500">Includi 1° e 2° Allenatore salvati</p></div></div><div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${importStaff ? 'bg-amber-400 border-amber-400' : 'border-slate-200'}`}>{importStaff && <Check size={12} className="text-white" />}</div></div><div className="h-px bg-slate-100 my-2"></div>{filteredRegistryForModal.map(p => (<div key={p.id} onClick={() => setSelectedInModal(prev => { const next = new Set(prev); if (next.has(p.id)) next.delete(p.id); else next.add(p.id); return next; })} className={`p-3 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between ${selectedInModal.has(p.id) ? (isBlue ? 'border-blue-400 bg-blue-50' : 'border-red-400 bg-red-50') : 'border-slate-100 bg-white hover:border-slate-200'}`}><div className="flex items-center gap-3"><div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black ${selectedInModal.has(p.id) ? (isBlue ? 'bg-blue-600 text-white' : 'bg-red-600 text-white') : 'bg-slate-100 text-slate-500'}`}>{p.number}</div><div><p className="text-xs font-black uppercase text-slate-800 leading-tight">{p.lastName}</p><p className="text-[10px] font-medium text-slate-400">{p.firstName}</p></div></div><div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${selectedInModal.has(p.id) ? (isBlue ? 'bg-blue-600 border-blue-600' : 'bg-red-600 border-red-600') : 'border-slate-200'}`}>{selectedInModal.has(p.id) && <Check size={12} className="text-white" />}</div></div>))}</div></div><div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3"><button onClick={() => setShowImportModal(false)} className="flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest text-slate-400 bg-white border border-slate-200">Annulla</button><button onClick={() => confirmModalImport(false)} disabled={selectedInModal.size === 0 && !importStaff} className={`flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest text-white shadow-lg ${isBlue ? 'bg-blue-600' : 'bg-red-600'} disabled:opacity-50`}>Conferma ({selectedInModal.size + (importStaff ? 1 : 0)})</button></div>
+            <div className={`p-6 text-white flex justify-between items-center ${isBlue ? 'bg-blue-600' : 'bg-red-600'}`}><div><h3 className="font-black uppercase tracking-widest text-sm">Importa da Anagrafica</h3><p className="text-[10px] font-bold opacity-70">Seleziona il team e gli atleti per questa gara</p></div><button onClick={() => setShowImportModal(false)} className="bg-white/20 p-2 rounded-xl hover:bg-white/30 transition-colors"><X size={20} /></button></div>
+            
+            <div className="p-5 space-y-4 flex-1 flex flex-col min-h-0">
+              <div className="space-y-1.5">
+                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><Layers size={10} /> Seleziona Database Team</label>
+                 <div className="relative">
+                    <select 
+                      className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-black text-slate-800 text-xs uppercase outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                      value={selectedRegistryIndex}
+                      onChange={(e) => {
+                        setSelectedRegistryIndex(parseInt(e.target.value));
+                        setSelectedInModal(new Set());
+                      }}
+                    >
+                      {allRegistries.map((reg, idx) => (
+                        <option key={idx} value={idx}>{reg.category} - {reg.teamName}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400" size={16} />
+                 </div>
+              </div>
+
+              <button onClick={() => confirmModalImport(true)} className={`w-full py-4 rounded-2xl flex items-center justify-center gap-3 font-black text-xs uppercase tracking-widest transition-all shadow-lg border-2 border-transparent hover:scale-[1.02] active:scale-95 mb-2 ${isBlue ? 'bg-blue-900 text-white shadow-blue-100' : 'bg-red-900 text-white shadow-red-100'}`}><Zap size={18} className="text-amber-400 fill-amber-400" /> Importa Tutto il Team (Atleti + Staff)</button>
+              <div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input type="text" placeholder="Cerca per cognome o numero..." className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-sm" value={modalSearch} onChange={e => setModalSearch(e.target.value)} /></div>
+              
+              <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-2">
+                <div onClick={() => setImportStaff(!importStaff)} className={`p-3 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between ${importStaff ? 'border-amber-400 bg-amber-50' : 'border-slate-100 bg-white'}`}><div className="flex items-center gap-3"><div className={`p-2 rounded-xl ${importStaff ? 'bg-amber-400 text-white' : 'bg-slate-100 text-slate-400'}`}><UserCog size={18} /></div><div><p className="text-xs font-black uppercase text-slate-800 leading-tight">Area Tecnica</p><p className="text-[9px] font-medium text-slate-500">Includi 1° e 2° Allenatore salvati</p></div></div><div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${importStaff ? 'bg-amber-400 border-amber-400' : 'border-slate-200'}`}>{importStaff && <Check size={12} className="text-white" />}</div></div>
+                <div className="h-px bg-slate-100 my-2"></div>
+                {filteredRegistryForModal.map(p => (<div key={p.id} onClick={() => setSelectedInModal(prev => { const next = new Set(prev); if (next.has(p.id)) next.delete(p.id); else next.add(p.id); return next; })} className={`p-3 rounded-2xl border-2 cursor-pointer transition-all flex items-center justify-between ${selectedInModal.has(p.id) ? (isBlue ? 'border-blue-400 bg-blue-50' : 'border-red-400 bg-red-50') : 'border-slate-100 bg-white hover:border-slate-200'}`}><div className="flex items-center gap-3"><div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black ${selectedInModal.has(p.id) ? (isBlue ? 'bg-blue-600 text-white' : 'bg-red-600 text-white') : 'bg-slate-100 text-slate-500'}`}>{p.number}</div><div><p className="text-xs font-black uppercase text-slate-800 leading-tight">{p.lastName}</p><p className="text-[10px] font-medium text-slate-400">{p.firstName}</p></div></div><div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${selectedInModal.has(p.id) ? (isBlue ? 'bg-blue-600 border-blue-600' : 'bg-red-600 border-red-600') : 'border-slate-200'}`}>{selectedInModal.has(p.id) && <Check size={12} className="text-white" />}</div></div>))}
+              </div>
+            </div>
+            
+            <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
+              <button onClick={() => setShowImportModal(false)} className="flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest text-slate-400 bg-white border border-slate-200">Annulla</button>
+              <button onClick={() => confirmModalImport(false)} disabled={selectedInModal.size === 0 && !importStaff} className={`flex-1 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest text-white shadow-lg ${isBlue ? 'bg-blue-600' : 'bg-red-600'} disabled:opacity-50`}>Conferma ({selectedInModal.size + (importStaff ? 1 : 0)})</button>
+            </div>
           </div>
         </div>
       )}

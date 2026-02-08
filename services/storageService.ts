@@ -1,5 +1,5 @@
 
-import { Match, TeamProfile, ScheduledMatch, UserProfile, UserRole, Language, TrainingSession, Collaborator } from '../types';
+import { Match, TeamProfile, ScheduledMatch, UserProfile, UserRole, Language, TrainingSession, Collaborator, Exercise } from '../types';
 
 const KEYS = {
   USER_PROFILE: 'hpro_user_v2',
@@ -8,7 +8,8 @@ const KEYS = {
   CALENDAR: 'hpro_calendar_v2',
   ACTIVE_MATCH: 'hpro_active_match_v2',
   TRAININGS: 'hpro_trainings_v1',
-  COLLABORATORS: 'hpro_collaborators_v1'
+  COLLABORATORS: 'hpro_collaborators_v1',
+  CUSTOM_EXERCISES: 'hpro_custom_exercises_v1'
 };
 
 const getDeviceType = (): 'Mobile' | 'Desktop' | 'Tablet' | 'Unknown' => {
@@ -41,8 +42,6 @@ export const storage = {
       deviceName: getDeviceType() 
     };
     localStorage.setItem(KEYS.USER_PROFILE, JSON.stringify(userWithActivity));
-    
-    // Sync to collaborators list with device metadata
     storage.syncCollaborator(userWithActivity as Collaborator);
   },
 
@@ -50,7 +49,6 @@ export const storage = {
   getCollaborators: (): Collaborator[] => {
     const saved = localStorage.getItem(KEYS.COLLABORATORS);
     const collaborators: Collaborator[] = saved ? JSON.parse(saved) : [];
-    
     return collaborators.map(c => ({
       ...c,
       isOnline: c.lastActive ? (Date.now() - c.lastActive < 300000) : false
@@ -60,22 +58,11 @@ export const storage = {
   syncCollaborator: (collab: Collaborator) => {
     const list = storage.getCollaborators();
     const deviceType = getDeviceType();
-    
     const index = list.findIndex(c => c.id === collab.id);
     if (index > -1) {
-      list[index] = { 
-        ...list[index], 
-        ...collab, 
-        deviceType,
-        lastActive: Date.now() 
-      };
+      list[index] = { ...list[index], ...collab, deviceType, lastActive: Date.now() };
     } else {
-      list.push({ 
-        ...collab, 
-        joinedAt: new Date().toISOString(), 
-        lastActive: Date.now(),
-        deviceType
-      });
+      list.push({ ...collab, joinedAt: new Date().toISOString(), lastActive: Date.now(), deviceType });
     }
     localStorage.setItem(KEYS.COLLABORATORS, JSON.stringify(list));
   },
@@ -94,9 +81,7 @@ export const storage = {
     localStorage.setItem(KEYS.COLLABORATORS, JSON.stringify(list));
   },
 
-  getLanguage: (): Language => {
-    return storage.getUser().language || 'it';
-  },
+  getLanguage: (): Language => storage.getUser().language || 'it',
 
   setLanguage: (lang: Language) => {
     const user = storage.getUser();
@@ -109,11 +94,8 @@ export const storage = {
     return saved ? JSON.parse(saved) : null;
   },
   setActiveMatch: (match: Match | null) => {
-    if (match) {
-      localStorage.setItem(KEYS.ACTIVE_MATCH, JSON.stringify(match));
-    } else {
-      localStorage.removeItem(KEYS.ACTIVE_MATCH);
-    }
+    if (match) localStorage.setItem(KEYS.ACTIVE_MATCH, JSON.stringify(match));
+    else localStorage.removeItem(KEYS.ACTIVE_MATCH);
   },
 
   // Matches History
@@ -124,15 +106,10 @@ export const storage = {
   saveMatch: (match: Match) => {
     const matches = storage.getMatches();
     const index = matches.findIndex(m => m.id === match.id);
-    if (index > -1) {
-      matches[index] = match;
-    } else {
-      matches.unshift(match);
-    }
+    if (index > -1) matches[index] = match;
+    else matches.unshift(match);
     localStorage.setItem(KEYS.MATCHES, JSON.stringify(matches));
-    if (match.isFinished) {
-      storage.setActiveMatch(null);
-    }
+    if (match.isFinished) storage.setActiveMatch(null);
   },
   deleteMatch: (id: string) => {
     const matches = storage.getMatches().filter(m => m.id !== id);
@@ -142,34 +119,22 @@ export const storage = {
   // Team Registries
   getAllRegistries: (): TeamProfile[] => {
     const saved = localStorage.getItem(KEYS.REGISTRIES);
-    if (!saved) return [];
-    return JSON.parse(saved);
+    return saved ? JSON.parse(saved) : [];
   },
-
   getRegistryByCategory: (category: string): TeamProfile | null => {
     const all = storage.getAllRegistries();
     return all.find(r => r.category.toUpperCase() === category.toUpperCase()) || null;
   },
-
   saveRegistry: (reg: TeamProfile) => {
     const all = storage.getAllRegistries();
     const index = all.findIndex(r => r.category.toUpperCase() === reg.category.toUpperCase());
-    if (index > -1) {
-      all[index] = reg;
-    } else {
-      all.push(reg);
-    }
+    if (index > -1) all[index] = reg;
+    else all.push(reg);
     localStorage.setItem(KEYS.REGISTRIES, JSON.stringify(all));
   },
-
   deleteRegistry: (category: string) => {
     const all = storage.getAllRegistries().filter(r => r.category.toUpperCase() !== category.toUpperCase());
     localStorage.setItem(KEYS.REGISTRIES, JSON.stringify(all));
-  },
-
-  getRegistry: (): TeamProfile => {
-    const all = storage.getAllRegistries();
-    return all[0] || { teamName: '', coachName: '', category: 'Serie B', players: [] };
   },
 
   // Training Sessions
@@ -180,16 +145,24 @@ export const storage = {
   saveTraining: (session: TrainingSession) => {
     const sessions = storage.getTrainings();
     const index = sessions.findIndex(s => s.id === session.id);
-    if (index > -1) {
-      sessions[index] = session;
-    } else {
-      sessions.unshift(session);
-    }
+    if (index > -1) sessions[index] = session;
+    else sessions.unshift(session);
     localStorage.setItem(KEYS.TRAININGS, JSON.stringify(sessions));
   },
   deleteTraining: (id: string) => {
     const sessions = storage.getTrainings().filter(s => s.id !== id);
     localStorage.setItem(KEYS.TRAININGS, JSON.stringify(sessions));
+  },
+
+  // Custom Exercises
+  getCustomExercises: (): Exercise[] => {
+    const saved = localStorage.getItem(KEYS.CUSTOM_EXERCISES);
+    return saved ? JSON.parse(saved) : [];
+  },
+  saveCustomExercise: (ex: Exercise) => {
+    const all = storage.getCustomExercises();
+    all.push(ex);
+    localStorage.setItem(KEYS.CUSTOM_EXERCISES, JSON.stringify(all));
   },
 
   // Calendar
@@ -218,6 +191,7 @@ export const storage = {
       calendar: storage.getCalendar(),
       trainings: storage.getTrainings(),
       collaborators: storage.getCollaborators(),
+      customExercises: storage.getCustomExercises(),
       exportedAt: new Date().toISOString()
     };
     storage.exportData(data, 'HandballPro_FullBackup');
@@ -233,6 +207,7 @@ export const storage = {
       if (data.calendar) storage.setCalendar(data.calendar);
       if (data.trainings) localStorage.setItem(KEYS.TRAININGS, JSON.stringify(data.trainings));
       if (data.collaborators) localStorage.setItem(KEYS.COLLABORATORS, JSON.stringify(data.collaborators));
+      if (data.customExercises) localStorage.setItem(KEYS.CUSTOM_EXERCISES, JSON.stringify(data.customExercises));
       return true;
     } catch (e) {
       console.error("Errore importazione", e);

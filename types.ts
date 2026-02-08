@@ -36,7 +36,7 @@ export interface UserProfile {
   lastName: string;
   society: string;
   role: UserRole;
-  position?: string; // Nuova proprietà per qualifica specifica (es. Vice Allenatore)
+  position?: string;
   pin?: string;
   language?: Language;
   lastActive?: number;
@@ -75,6 +75,7 @@ export interface MatchEvent {
   team: 'HOME' | 'AWAY';
   timestamp: number;
   gameTime: string;
+  atSecond?: number; // Tempo assoluto in secondi dall'inizio del match
   duration?: number;
   isStaff?: boolean;
 }
@@ -114,6 +115,24 @@ export interface ScheduledMatch {
   category: string;
 }
 
+export enum ExerciseCategory {
+  STRETCHING = 'Stretching',
+  STRENGTH = 'Potenziamento',
+  HANDBALL = 'Pallamano',
+  WARMUP = 'Riscaldamento'
+}
+
+export interface Exercise {
+  id: string;
+  name: string;
+  category: ExerciseCategory;
+  muscles: string[];
+  description: string;
+  sets: number;
+  reps: string; 
+  rest: string;
+}
+
 export interface TrainingEvaluation {
   playerId: string;
   playerName: string;
@@ -121,6 +140,7 @@ export interface TrainingEvaluation {
   role: HandballRole | string;
   rating: number; 
   notes: string;
+  assignedExercises?: Exercise[]; // Esercizi specifici assegnati all'atleta
 }
 
 export interface TrainingSession {
@@ -128,5 +148,6 @@ export interface TrainingSession {
   date: string;
   category: string;
   evaluations: TrainingEvaluation[];
+  exercises?: Exercise[]; // Esercizi generali per tutta la squadra
   summary?: string;
 }

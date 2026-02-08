@@ -39,6 +39,30 @@ const MatchConsole: React.FC<MatchConsoleProps> = ({ match, onUpdate, onFinish, 
 
   const targetSeconds = periodDurations[currentPeriod];
 
+  // Calcola il tempo assoluto attuale del match per gestire le sospensioni tra i periodi
+  const getMatchAbsoluteSeconds = (p: number, s: number) => {
+    let abs = 0;
+    for (let i = 1; i < p; i++) {
+      abs += periodDurations[i] || 1800;
+    }
+    return abs + s;
+  };
+
+  const currentMatchAbsSeconds = useMemo(() => getMatchAbsoluteSeconds(currentPeriod, seconds), [currentPeriod, seconds, periodDurations]);
+
+  // Helper per determinare se un giocatore è sospeso
+  const getPlayerSuspensionInfo = (playerId: string) => {
+    const twoMinEvents = match.events.filter(e => e.playerId === playerId && e.type === EventType.TWO_MINUTES);
+    if (twoMinEvents.length === 0) return null;
+    
+    // Prendi l'ultima sospensione
+    const lastPenalty = twoMinEvents[twoMinEvents.length - 1];
+    const penaltyStart = lastPenalty.atSecond || 0;
+    const remaining = Math.max(0, (penaltyStart + 120) - currentMatchAbsSeconds);
+    
+    return remaining > 0 ? { remaining, event: lastPenalty } : null;
+  };
+
   // Calcola le statistiche per la persona selezionata
   const selectedStats = useMemo(() => {
     if (!selectedPerson) return null;
@@ -127,7 +151,6 @@ const MatchConsole: React.FC<MatchConsoleProps> = ({ match, onUpdate, onFinish, 
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Correzione manuale del punteggio (senza eventi)
   const manualScoreAdjustment = (team: 'HOME' | 'AWAY', delta: number) => {
     const currentMatch = matchRef.current;
     const newScore = { ...currentMatch.score };
@@ -154,7 +177,8 @@ const MatchConsole: React.FC<MatchConsoleProps> = ({ match, onUpdate, onFinish, 
       team,
       isStaff: true,
       timestamp: Date.now(),
-      gameTime: `${currentPeriod}°T - ${formatTime(seconds)}`
+      gameTime: `${currentPeriod}°T - ${formatTime(seconds)}`,
+      atSecond: currentMatchAbsSeconds
     };
 
     const currentMatch = matchRef.current;
@@ -188,6 +212,14 @@ const MatchConsole: React.FC<MatchConsoleProps> = ({ match, onUpdate, onFinish, 
   const addEvent = (type: EventType) => {
     if (!selectedPerson) return;
     const { person, team, isStaff } = selectedPerson;
+    
+    // Se il giocatore è sospeso e cerchiamo di aggiungere un evento (eccetto sanzioni staff), blocca
+    const suspension = getPlayerSuspensionInfo(person.id);
+    if (suspension && !isStaff) {
+      alert("Il giocatore è sospeso per 2 minuti.");
+      return;
+    }
+
     const playerName = isStaff ? `${person.lastName} (${person.role})` : `${person.lastName} ${person.firstName}`;
 
     const newEvent: MatchEvent = {
@@ -198,7 +230,8 @@ const MatchConsole: React.FC<MatchConsoleProps> = ({ match, onUpdate, onFinish, 
       team,
       isStaff,
       timestamp: Date.now(),
-      gameTime: `${currentPeriod}°T - ${formatTime(seconds)}`
+      gameTime: `${currentPeriod}°T - ${formatTime(seconds)}`,
+      atSecond: currentMatchAbsSeconds
     };
 
     const currentMatch = matchRef.current;
@@ -212,6 +245,11 @@ const MatchConsole: React.FC<MatchConsoleProps> = ({ match, onUpdate, onFinish, 
       currentTime: seconds,
       currentPeriod: currentPeriod
     });
+
+    // Se abbiamo appena dato 2 minuti, deseleziona il giocatore
+    if (type === EventType.TWO_MINUTES) {
+      setSelectedPerson(null);
+    }
   };
 
   const deleteEvent = (eventId: string) => {
@@ -259,22 +297,40 @@ const MatchConsole: React.FC<MatchConsoleProps> = ({ match, onUpdate, onFinish, 
   const renderPersonGrid = (roster: Player[], staff: Player[], team: 'HOME' | 'AWAY') => (
     <div className="space-y-4">
       <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-3 gap-2">
-        {roster.map(player => (
-          <button
-            key={player.id}
-            onClick={() => setSelectedPerson({ person: player, team, isStaff: false })}
-            className={`py-3 px-1 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-0.5 min-h-[64px] ${
-              selectedPerson?.person.id === player.id && !selectedPerson.isStaff
-                ? 'border-blue-600 bg-blue-50 shadow-sm' 
-                : 'border-slate-100 hover:border-blue-200 bg-white shadow-sm'
-            }`}
-          >
-            <span className="text-lg md:text-xl font-black text-slate-800 leading-none">#{player.number}</span>
-            <span className="text-[8px] md:text-[9px] font-black text-slate-400 uppercase truncate w-full text-center tracking-tighter">
-              {player.lastName.split(' ')[0]}
-            </span>
-          </button>
-        ))}
+        {roster.map(player => {
+          const suspension = getPlayerSuspensionInfo(player.id);
+          const isSuspended = suspension !== null;
+          const isSelected = selectedPerson?.person.id === player.id && !selectedPerson.isStaff;
+
+          return (
+            <button
+              key={player.id}
+              disabled={isSuspended}
+              onClick={() => setSelectedPerson({ person: player, team, isStaff: false })}
+              className={`relative py-3 px-1 rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-0.5 min-h-[64px] overflow-hidden ${
+                isSuspended 
+                  ? 'border-orange-500 bg-orange-50 cursor-not-allowed opacity-80' 
+                  : isSelected
+                    ? 'border-blue-600 bg-blue-50 shadow-sm' 
+                    : 'border-slate-100 hover:border-blue-200 bg-white shadow-sm'
+              }`}
+            >
+              {isSuspended && (
+                <div className="absolute top-0 left-0 w-full h-full bg-orange-500/10 flex items-center justify-center">
+                   <div className="bg-orange-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-lg animate-pulse">
+                      {Math.floor(suspension.remaining / 60)}:{(suspension.remaining % 60).toString().padStart(2, '0')}
+                   </div>
+                </div>
+              )}
+              <span className={`text-lg md:text-xl font-black leading-none ${isSuspended ? 'text-orange-700' : 'text-slate-800'}`}>
+                #{player.number}
+              </span>
+              <span className={`text-[8px] md:text-[9px] font-black uppercase truncate w-full text-center tracking-tighter ${isSuspended ? 'text-orange-500' : 'text-slate-400'}`}>
+                {player.lastName.split(' ')[0]}
+              </span>
+            </button>
+          );
+        })}
       </div>
       {staff.length > 0 && (
         <div className="pt-2 border-t border-slate-100">

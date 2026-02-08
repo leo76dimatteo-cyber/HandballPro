@@ -23,7 +23,7 @@ interface Toast {
 interface InviteData {
   role: UserRole;
   society: string;
-  position: string; // Nuova proprietà estratta dall'invito
+  position: string;
   inviter: string;
 }
 
@@ -95,14 +95,14 @@ const App: React.FC = () => {
         id: currentUser.id === 'default' ? Math.random().toString(36).substr(2, 9) : currentUser.id,
         role: pendingInvite.role,
         society: pendingInvite.society,
-        position: pendingInvite.position, // Salviamo la qualifica specifica
+        position: pendingInvite.position,
         lastActive: Date.now()
       };
       storage.setUser(updatedUser);
       storage.syncCollaborator(updatedUser as Collaborator);
       setCurrentUser(updatedUser);
       setPendingInvite(null);
-      showToast(`Profilo configurato come ${pendingInvite.position || pendingInvite.role} per ${pendingInvite.society}`);
+      showToast(`${t.saveProfile}: ${pendingInvite.position || pendingInvite.role} - ${pendingInvite.society}`);
     }
   };
 
@@ -130,20 +130,20 @@ const App: React.FC = () => {
 
   const startMatch = () => {
     if (currentUser.role === UserRole.GUEST) {
-      showToast("Accesso negato", "error");
+      showToast(t.accessLevel + " Denied", "error");
       return;
     }
     const errors = [];
-    if (!homeTeam.trim() || homeTeam === 'LA MIA SQUADRA') errors.push("Squadra Casa mancante.");
-    if (!awayTeam.trim() || awayTeam === 'AVVERSARI') errors.push("Squadra Trasferta mancante.");
-    if (homeRoster.length === 0) errors.push("Roster Casa vuoto.");
-    if (awayRoster.length === 0) errors.push("Roster Trasferta vuoto.");
-    if (!matchCategory.trim()) errors.push("Categoria mancante.");
+    if (!homeTeam.trim() || homeTeam === 'LA MIA SQUADRA') errors.push("Home team missing.");
+    if (!awayTeam.trim() || awayTeam === 'AVVERSARI') errors.push("Away team missing.");
+    if (homeRoster.length === 0) errors.push("Home roster empty.");
+    if (awayRoster.length === 0) errors.push("Away roster empty.");
+    if (!matchCategory.trim()) errors.push("Category missing.");
     if (errors.length > 0) { alert(errors.join("\n")); return; }
 
     const newMatch: Match = {
       id: Math.random().toString(36).substr(2, 9),
-      date: new Date().toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' }),
+      date: new Date().toLocaleDateString(lang === 'it' ? 'it-IT' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
       category: matchCategory.trim(),
       homeTeamName: homeTeam.toUpperCase(),
       awayTeamName: awayTeam.toUpperCase(),
@@ -173,7 +173,7 @@ const App: React.FC = () => {
 
   const navigateTo = (newView: AppState) => {
     if ((newView === 'SETUP' || newView === 'USER_MANAGEMENT') && currentUser.role === UserRole.GUEST) {
-      showToast("Accesso negato", "error");
+      showToast(t.accessLevel + " Denied", "error");
       return;
     }
     setView(newView);
@@ -187,7 +187,7 @@ const App: React.FC = () => {
             <div className="flex items-center gap-3">
                <div className="p-2 bg-white/20 rounded-xl"><Activity size={18} className="animate-pulse" /></div>
                <div className="text-left">
-                  <p className="text-[8px] font-black uppercase tracking-widest opacity-70">Gara in Corso</p>
+                  <p className="text-[8px] font-black uppercase tracking-widest opacity-70">{t.matchInProgress}</p>
                   <p className="font-black text-sm md:text-lg">{match.homeTeamName} {match.score.home} - {match.score.away} {match.awayTeamName}</p>
                </div>
             </div>
@@ -201,8 +201,8 @@ const App: React.FC = () => {
             <Trophy size={48} className="text-white md:w-16 md:h-16" />
           </div>
         </div>
-        <h1 className="text-4xl md:text-7xl font-black text-slate-900 tracking-tighter mb-2 md:mb-4">Handball<span className="text-blue-600">Pro</span> <span className="text-slate-300 text-3xl md:text-5xl">v.02</span></h1>
-        <p className="text-sm md:text-xl text-slate-500 font-medium max-w-lg mx-auto leading-relaxed px-4">Performance tecnica, referti AI e gestione lab allenamenti.</p>
+        <h1 className="text-4xl md:text-7xl font-black text-slate-900 tracking-tighter mb-2 md:mb-4">Handball<span className="text-blue-600">Pro</span> <span className="text-slate-300 text-3xl md:text-5xl">3.0</span></h1>
+        <p className="text-sm md:text-xl text-slate-500 font-medium max-w-lg mx-auto leading-relaxed px-4">{t.appTitleDesc}</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 mb-12">
@@ -210,25 +210,25 @@ const App: React.FC = () => {
           <button onClick={() => navigateTo('SETUP')} className="bg-white p-6 md:p-8 rounded-3xl md:rounded-[2.5rem] shadow-sm border border-slate-200 hover:border-blue-500 hover:shadow-xl transition-all text-left group">
             <div className="w-12 h-12 md:w-14 md:h-14 bg-blue-600 rounded-2xl flex items-center justify-center text-white mb-4 md:mb-6 group-hover:scale-110 transition-transform shadow-lg shadow-blue-100"><Plus size={24} /></div>
             <h3 className="text-xl md:text-2xl font-black text-slate-900 mb-2">{t.newMatch}</h3>
-            <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">Referto live professionale con statistiche avanzate.</p>
+            <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">{t.inviteDesc}</p>
           </button>
 
           <button onClick={() => navigateTo('TRAINING')} className="bg-white p-6 md:p-8 rounded-3xl md:rounded-[2.5rem] shadow-sm border border-slate-200 hover:border-emerald-500 hover:shadow-xl transition-all text-left group">
             <div className="w-12 h-12 md:w-14 md:h-14 bg-emerald-600 rounded-2xl flex items-center justify-center text-white mb-4 md:mb-6 group-hover:scale-110 transition-transform shadow-lg shadow-emerald-100"><Dumbbell size={24} /></div>
-            <h3 className="text-xl md:text-2xl font-black text-slate-900 mb-2">Training Lab</h3>
-            <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">Presenze, ruoli specifici e valutazione miglioramenti atleti.</p>
+            <h3 className="text-xl md:text-2xl font-black text-slate-900 mb-2">{t.trainingLab}</h3>
+            <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">{t.trainingDesc}</p>
           </button>
           
           <button onClick={() => navigateTo('CALENDAR')} className="bg-white p-6 md:p-8 rounded-3xl md:rounded-[2.5rem] shadow-sm border border-slate-200 hover:border-blue-400 hover:shadow-xl transition-all text-left group">
             <div className="w-12 h-12 md:w-14 md:h-14 bg-blue-500 rounded-2xl flex items-center justify-center text-white mb-4 md:mb-6 group-hover:scale-110 transition-transform shadow-lg shadow-blue-100"><CalendarIcon size={24} /></div>
             <h3 className="text-xl md:text-2xl font-black text-slate-900 mb-2">{t.calendar}</h3>
-            <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">Pianifica turni di campionato e amichevoli.</p>
+            <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">{t.upcomingMatches}</p>
           </button>
 
           <button onClick={() => navigateTo('USER_MANAGEMENT')} className="bg-white p-6 md:p-8 rounded-3xl md:rounded-[2.5rem] shadow-sm border border-slate-200 hover:border-amber-500 hover:shadow-xl transition-all text-left group">
             <div className="w-12 h-12 md:w-14 md:h-14 bg-amber-500 rounded-2xl flex items-center justify-center text-white mb-4 md:mb-6 group-hover:scale-110 transition-transform shadow-lg shadow-amber-100"><Users size={24} /></div>
-            <h3 className="text-xl md:text-2xl font-black text-slate-900 mb-2">Collaboratori</h3>
-            <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">Gestione permessi e monitoraggio attività online.</p>
+            <h3 className="text-xl md:text-2xl font-black text-slate-900 mb-2">{t.inviteTitle}</h3>
+            <p className="text-slate-500 text-xs md:text-sm font-medium leading-relaxed">{t.collabDesc}</p>
           </button>
         </div>
 
@@ -237,13 +237,13 @@ const App: React.FC = () => {
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-blue-50 rounded-xl text-blue-600"><Shield size={20} /></div>
-                <h3 className="font-black text-[10px] md:text-sm uppercase tracking-widest text-slate-800">I miei Team</h3>
+                <h3 className="font-black text-[10px] md:text-sm uppercase tracking-widest text-slate-800">{t.myTeams}</h3>
               </div>
               <button onClick={() => navigateTo('SETTINGS')} className="p-2 text-slate-300 hover:text-blue-600 transition-colors"><ChevronRight size={18} /></button>
             </div>
             <div className="space-y-4">
               {allRegistries.length === 0 ? (
-                <p className="text-xs text-slate-400 font-medium py-4 text-center">Nessun team configurato.</p>
+                <p className="text-xs text-slate-400 font-medium py-4 text-center">No teams configured.</p>
               ) : (
                 allRegistries.map((reg, idx) => (
                   <div key={idx} className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100">
@@ -260,7 +260,7 @@ const App: React.FC = () => {
           <button onClick={() => navigateTo('SETTINGS')} className="w-full bg-slate-900 p-6 rounded-[2rem] text-white flex items-center justify-between group">
              <div className="flex items-center gap-3">
                 <SettingsIcon className="text-slate-500 group-hover:rotate-90 transition-transform" />
-                <span className="font-black text-xs uppercase tracking-widest">Configura App</span>
+                <span className="font-black text-xs uppercase tracking-widest">{t.configureApp}</span>
              </div>
              <ChevronRight size={20} className="text-slate-500" />
           </button>
@@ -275,15 +275,15 @@ const App: React.FC = () => {
                     <UserPlus size={40} />
                  </div>
                  <h2 className="text-2xl font-black uppercase tracking-tight">{t.inviteWelcome}</h2>
-                 <p className="text-[10px] font-bold opacity-70 uppercase tracking-widest mt-1">Configurazione Rapida Profilo</p>
+                 <p className="text-[10px] font-bold opacity-70 uppercase tracking-widest mt-1">{t.setup} Profile</p>
               </div>
               <div className="p-8 text-center space-y-6">
                  <div className="space-y-2">
                     <p className="text-slate-400 text-xs font-medium">{t.inviteFrom} <span className="text-slate-900 font-black uppercase">{pendingInvite.inviter}</span> {t.joinAs}</p>
                     <div className="bg-blue-50 border border-blue-100 py-3 rounded-2xl">
-                       <span className="text-xl font-black text-blue-600 uppercase tracking-tighter">{pendingInvite.position || (pendingInvite.role === UserRole.OFFICIAL ? 'EDITOR' : 'VISUALIZZATORE')}</span>
+                       <span className="text-xl font-black text-blue-600 uppercase tracking-tighter">{pendingInvite.position || (pendingInvite.role === UserRole.OFFICIAL ? t.editorRole : t.viewerRole)}</span>
                     </div>
-                    <p className="text-slate-400 text-xs font-medium">per la società <span className="text-slate-900 font-black uppercase">{pendingInvite.society}</span></p>
+                    <p className="text-slate-400 text-xs font-medium">for {pendingInvite.society}</p>
                  </div>
                  <div className="flex flex-col gap-3">
                     <button onClick={handleAcceptInvite} className="w-full bg-slate-900 text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl active:scale-95 transition-all">
@@ -314,22 +314,22 @@ const App: React.FC = () => {
       <nav className="bg-white/95 backdrop-blur-xl border-b border-slate-200/60 px-4 md:px-8 py-4 md:py-5 flex items-center justify-between sticky top-0 z-50 shadow-sm">
         <div className="flex items-center gap-2 md:gap-3 cursor-pointer group" onClick={() => navigateTo('HOME')}>
           <div className="bg-blue-600 p-2 md:p-2.5 rounded-xl shadow-lg group-hover:rotate-12 transition-all"><Trophy size={18} className="text-white md:w-[22px] md:h-[22px]" /></div>
-          <span className="text-lg md:text-2xl font-black tracking-tighter text-slate-900">Handball<span className="text-blue-600">Pro</span> <span className="text-slate-400 text-xs md:text-sm">v.02</span></span>
+          <span className="text-lg md:text-2xl font-black tracking-tighter text-slate-900">Handball<span className="text-blue-600">Pro</span> <span className="text-slate-400 text-xs md:text-sm">3.0</span></span>
         </div>
         <div className="flex items-center gap-1 md:gap-2">
-          <button onClick={() => navigateTo('HOME')} className={`p-2.5 md:p-3 rounded-xl transition-all ${view === 'HOME' ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}><Home size={20} /></button>
-          <button onClick={() => navigateTo('USER_MANAGEMENT')} className={`p-2.5 md:p-3 rounded-xl transition-all ${view === 'USER_MANAGEMENT' ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}><Users size={20} /></button>
-          <button onClick={() => navigateTo('HISTORY')} className={`p-2.5 md:p-3 rounded-xl transition-all ${view === 'HISTORY' ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}><HistoryIcon size={20} /></button>
-          <button onClick={() => navigateTo('SETTINGS')} className={`p-2.5 md:p-3 rounded-xl transition-all ${view === 'SETTINGS' ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`}><SettingsIcon size={20} /></button>
+          <button onClick={() => navigateTo('HOME')} className={`p-2.5 md:p-3 rounded-xl transition-all ${view === 'HOME' ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`} title={t.home}><Home size={20} /></button>
+          <button onClick={() => navigateTo('USER_MANAGEMENT')} className={`p-2.5 md:p-3 rounded-xl transition-all ${view === 'USER_MANAGEMENT' ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`} title={t.inviteTitle}><Users size={20} /></button>
+          <button onClick={() => navigateTo('HISTORY')} className={`p-2.5 md:p-3 rounded-xl transition-all ${view === 'HISTORY' ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`} title={t.archive}><HistoryIcon size={20} /></button>
+          <button onClick={() => navigateTo('SETTINGS')} className={`p-2.5 md:p-3 rounded-xl transition-all ${view === 'SETTINGS' ? 'bg-slate-100 text-slate-900' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}`} title={t.settings}><SettingsIcon size={20} /></button>
         </div>
       </nav>
 
       <main className="container mx-auto">
         {view === 'HOME' && renderHome()}
-        {view === 'TRAINING' && <TrainingManager onBack={() => setView('HOME')} onNavigateToSettings={() => setView('SETTINGS')} role={currentUser.role} />}
-        {view === 'USER_MANAGEMENT' && <UserManagement onBack={() => setView('HOME')} onNotify={showToast} isAdmin={currentUser.role === UserRole.ADMIN} />}
+        {view === 'TRAINING' && <TrainingManager onBack={() => setView('HOME')} onNavigateToSettings={() => setView('SETTINGS')} role={currentUser.role} t={t} />}
+        {view === 'USER_MANAGEMENT' && <UserManagement onBack={() => setView('HOME')} onNotify={showToast} isAdmin={currentUser.role === UserRole.ADMIN} t={t} currentUser={currentUser} />}
         {view === 'SETTINGS' && <Settings user={currentUser} onUpdateUser={setCurrentUser} onBack={() => setView('HOME')} t={t} onLangChange={(l) => { setLang(l); storage.setLanguage(l); }} onNotify={showToast} />}
-        {view === 'HISTORY' && <div className="p-4"><MatchHistory matches={pastMatches} onView={(m) => {setMatch(m); setView('REPORT');}} onDelete={(id) => { storage.deleteMatch(id); setPastMatches(storage.getMatches()); showToast("Match eliminato"); }} onBack={() => setView('HOME')} canDelete={currentUser.role === UserRole.ADMIN} /></div>}
+        {view === 'HISTORY' && <div className="p-4"><MatchHistory matches={pastMatches} onView={(m) => {setMatch(m); setView('REPORT');}} onDelete={(id) => { storage.deleteMatch(id); setPastMatches(storage.getMatches()); showToast("Match deleted"); }} onBack={() => setView('HOME')} canDelete={currentUser.role === UserRole.ADMIN} t={t} /></div>}
         {view === 'SETUP' && (
           <div className="max-w-7xl mx-auto py-6 md:py-12 px-4 md:px-6 animate-in fade-in">
              <div className="flex flex-col md:flex-row items-center justify-between mb-8 bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100 gap-4">
@@ -347,7 +347,7 @@ const App: React.FC = () => {
               <div className="md:col-span-12 bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-100 space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Categoria Gara</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.category} Gara</label>
                     <div className="relative">
                        <Layers className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
                        <input 
@@ -363,7 +363,7 @@ const App: React.FC = () => {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Squadra Casa</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.homeTeam}</label>
                     <input 
                       className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-slate-800 uppercase outline-none focus:ring-2 focus:ring-blue-500"
                       value={homeTeam}
@@ -371,7 +371,7 @@ const App: React.FC = () => {
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Squadra Trasferta</label>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t.awayTeam}</label>
                     <input 
                       className="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-slate-800 uppercase outline-none focus:ring-2 focus:ring-blue-500"
                       value={awayTeam}
@@ -390,8 +390,7 @@ const App: React.FC = () => {
                    onUpdate={setHomeRoster}
                    onUpdateStaff={setHomeStaff}
                    accentColor="blue"
-                   hasRegistry={allRegistries.some(r => r.category.toUpperCase() === matchCategory.toUpperCase())}
-                   registryPlayers={allRegistries.find(r => r.category.toUpperCase() === matchCategory.toUpperCase())?.players}
+                   allRegistries={allRegistries}
                    t={t}
                  />
               </div>
@@ -404,6 +403,7 @@ const App: React.FC = () => {
                    onUpdate={setAwayRoster}
                    onUpdateStaff={setAwayStaff}
                    accentColor="red"
+                   allRegistries={allRegistries}
                    t={t}
                  />
               </div>

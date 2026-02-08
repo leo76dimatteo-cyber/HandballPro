@@ -11,7 +11,8 @@ interface FinalReportProps {
   language?: Language;
 }
 
-const FinalReport: React.FC<FinalReportProps> = ({ match, onClose, t = {}, language = 'it' }) => {
+// Fixed TypeScript inference issue by casting default empty object to any
+const FinalReport: React.FC<FinalReportProps> = ({ match, onClose, t = {} as any, language = 'it' }) => {
   const [aiReport, setAiReport] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
@@ -29,7 +30,7 @@ const FinalReport: React.FC<FinalReportProps> = ({ match, onClose, t = {}, langu
     const element = document.createElement("a");
     const file = new Blob([aiReport], { type: 'text/plain' });
     element.href = URL.createObjectURL(file);
-    const fileName = `Referto_${match.homeTeamName.replace(/\s+/g, '_')}_vs_${match.awayTeamName.replace(/\s+/g, '_')}.txt`;
+    const fileName = `Report_${match.homeTeamName.replace(/\s+/g, '_')}_vs_${match.awayTeamName.replace(/\s+/g, '_')}.txt`;
     element.download = fileName;
     document.body.appendChild(element);
     element.click();
@@ -110,7 +111,7 @@ const FinalReport: React.FC<FinalReportProps> = ({ match, onClose, t = {}, langu
         </h4>
         <div className="space-y-3">
           {players.length === 0 ? (
-            <p className="text-[10px] text-slate-400 font-bold uppercase italic text-center py-2">Nessun gol registrato</p>
+            <p className="text-[10px] text-slate-400 font-bold uppercase italic text-center py-2">No goals recorded</p>
           ) : (
             players.map((p, idx) => (
               <div key={p.id} className="space-y-1">
@@ -141,16 +142,16 @@ const FinalReport: React.FC<FinalReportProps> = ({ match, onClose, t = {}, langu
     return (
       <div className={`${lightBg} p-4 rounded-xl border border-slate-100 mb-4`}>
          <h4 className={`text-[9px] font-black uppercase tracking-widest mb-3 flex items-center gap-2 ${accentText}`}>
-           <UserCog size={12} /> Area Tecnica - {title}
+           <UserCog size={12} /> {t.staff} - {title}
          </h4>
          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {staff.length === 0 ? (
-              <p className="text-[9px] text-slate-300 font-bold uppercase italic">Nessun membro staff registrato</p>
+              <p className="text-[9px] text-slate-300 font-bold uppercase italic">No staff recorded</p>
             ) : (
               staff.map(s => (
                 <div key={s.id} className="bg-white/50 p-2 rounded-lg border border-slate-50 flex items-center gap-2">
                    <div className={`p-1 rounded bg-white border border-slate-100 ${accentText}`}>
-                      {s.role?.toUpperCase().includes("ALLENATORE") ? <Star size={10} fill="currentColor" /> : <Shield size={10} />}
+                      {s.role?.toUpperCase().includes("COACH") || s.role?.toUpperCase().includes("ALLENATORE") ? <Star size={10} fill="currentColor" /> : <Shield size={10} />}
                    </div>
                    <div className="min-w-0">
                       <p className="text-[10px] font-black text-slate-800 uppercase leading-none mb-0.5 truncate">{s.lastName} {s.firstName}</p>
@@ -173,13 +174,13 @@ const FinalReport: React.FC<FinalReportProps> = ({ match, onClose, t = {}, langu
         <h1 className="text-3xl md:text-4xl font-black text-slate-900 mb-1 uppercase">PARTITA CONCLUSA</h1>
         <div className="flex flex-col md:flex-row items-center justify-center gap-2">
            <p className="text-slate-500 font-medium text-sm">{match.date}</p>
-           <span className="bg-slate-900 text-white text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest">{match.category || 'Serie B'}</span>
+           <span className="bg-slate-900 text-white text-[9px] font-black px-3 py-1 rounded-full uppercase tracking-widest">{match.category}</span>
         </div>
       </div>
 
       <div className="bg-white rounded-2xl md:rounded-3xl shadow-xl border border-slate-200 overflow-hidden mx-2">
         <div className="bg-slate-900 p-6 md:p-8 text-white relative">
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-blue-600 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest animate-pulse border border-white/20 shadow-lg">FINAL SCORE</div>
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-blue-600 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest animate-pulse border border-white/20 shadow-lg">{t.finalScore}</div>
           <div className="flex flex-col md:flex-row justify-between items-center text-center gap-6 mt-4">
             <div className="flex-1 w-full flex flex-col items-center">
               {match.homeLogo && <img src={match.homeLogo} alt="" className="w-16 h-16 md:w-20 md:h-20 object-contain mb-3 bg-white/10 rounded-2xl p-2" />}
@@ -205,19 +206,19 @@ const FinalReport: React.FC<FinalReportProps> = ({ match, onClose, t = {}, langu
                 Performance Team
               </h3>
               
-              {renderStatBar("Gol Segnati", stats.home.goals, stats.away.goals, <Trophy size={12}/>)}
-              {renderStatBar("Tiri Fuori", stats.home.misses, stats.away.misses, <Target size={12}/>)}
-              {renderStatBar("Palle Perse", stats.home.lostBalls, stats.away.lostBalls, <Ban size={12}/>)}
-              {renderStatBar("Parate", stats.home.saves, stats.away.saves, <FileText size={12}/>)}
+              {renderStatBar(t.goal, stats.home.goals, stats.away.goals, <Trophy size={12}/>)}
+              {renderStatBar(t.miss, stats.home.misses, stats.away.misses, <Target size={12}/>)}
+              {renderStatBar(t.lostBall, stats.home.lostBalls, stats.away.lostBalls, <Ban size={12}/>)}
+              {renderStatBar(t.save, stats.home.saves, stats.away.saves, <FileText size={12}/>)}
               {renderStatBar("Sanzioni", stats.home.sanzioni, stats.away.sanzioni, <Zap size={12}/>)}
 
               <div className="grid grid-cols-2 gap-4 mt-8">
                  <div className="bg-white p-3 rounded-xl border border-slate-200 text-center">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Precisione Casa</p>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{t.efficiency} {t.homeTeam}</p>
                     <p className="text-xl font-black text-blue-600">{stats.home.totalShots > 0 ? Math.round((stats.home.goals / stats.home.totalShots) * 100) : 0}%</p>
                  </div>
                  <div className="bg-white p-3 rounded-xl border border-slate-200 text-center">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Precisione Ospiti</p>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">{t.efficiency} {t.awayTeam}</p>
                     <p className="text-xl font-black text-red-600">{stats.away.totalShots > 0 ? Math.round((stats.away.goals / stats.away.totalShots) * 100) : 0}%</p>
                  </div>
               </div>
@@ -226,10 +227,9 @@ const FinalReport: React.FC<FinalReportProps> = ({ match, onClose, t = {}, langu
             <div className="space-y-4">
               <h3 className="text-xs font-black text-slate-800 flex items-center gap-2 uppercase tracking-widest">
                 <Users size={16} className="text-blue-600" />
-                Area Tecnica & Marcatori
+                {t.staff} & {t.roster}
               </h3>
               <div className="grid grid-cols-1 gap-4">
-                {/* Sezione Staff - Novità */}
                 <div className="space-y-0">
                   {renderStaffSection(match.homeTeamName, stats.home.staff, 'blue')}
                   {renderStaffSection(match.awayTeamName, stats.away.staff, 'red')}
@@ -247,7 +247,7 @@ const FinalReport: React.FC<FinalReportProps> = ({ match, onClose, t = {}, langu
             </div>
             <div className="flex items-center gap-3 mb-6">
                <div className="bg-blue-600 p-2 rounded-xl text-white shadow-lg"><FileText size={20} /></div>
-               <h3 className="text-xl font-black text-blue-900 uppercase tracking-tighter">Referto Tecnico AI</h3>
+               <h3 className="text-xl font-black text-blue-900 uppercase tracking-tighter">{t.technicalReportAi}</h3>
             </div>
             
             {loading ? (
@@ -258,30 +258,11 @@ const FinalReport: React.FC<FinalReportProps> = ({ match, onClose, t = {}, langu
                     <Zap size={16} className="text-blue-600" />
                   </div>
                 </div>
-                <p className="text-blue-600 font-black text-xs uppercase tracking-widest animate-pulse">Gemini sta elaborando l'analisi...</p>
+                <p className="text-blue-600 font-black text-xs uppercase tracking-widest animate-pulse">Gemini is processing...</p>
               </div>
             ) : (
               <div className="prose prose-sm text-slate-700 whitespace-pre-line leading-relaxed max-h-[600px] overflow-y-auto pr-3 custom-scrollbar text-sm font-medium">
                 {aiReport}
-              </div>
-            )}
-            
-            {!loading && (
-              <div className="mt-6 pt-6 border-t border-blue-100 space-y-4">
-                <h4 className="font-black text-slate-400 text-[10px] uppercase tracking-widest flex items-center gap-2">
-                  <Clock size={14} /> Ultimi Eventi Rilevanti
-                </h4>
-                <div className="space-y-2">
-                  {match.events.filter(e => [EventType.GOAL, EventType.RED_CARD, EventType.TWO_MINUTES, EventType.LOST_BALL].includes(e.type)).slice(-5).map(e => (
-                    <div key={e.id} className="text-[11px] p-3 bg-white border border-slate-100 rounded-xl flex justify-between items-center shadow-sm">
-                      <span className="min-w-0 truncate pr-2">
-                        <span className="font-mono font-bold text-blue-600 mr-2">{e.gameTime.split(' - ')[1]}</span> 
-                        <span className="font-black text-slate-700 uppercase">{e.playerName}</span>
-                      </span>
-                      <span className={`font-black text-[9px] px-2 py-0.5 rounded-lg border uppercase whitespace-nowrap ${e.type === EventType.LOST_BALL ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>{e.type.replace('_', ' ')}</span>
-                    </div>
-                  ))}
-                </div>
               </div>
             )}
           </div>
@@ -292,23 +273,23 @@ const FinalReport: React.FC<FinalReportProps> = ({ match, onClose, t = {}, langu
             onClick={() => window.print()}
             className="flex-1 min-w-[150px] bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 px-6 py-4 rounded-2xl font-black transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest shadow-sm active:scale-95"
           >
-            <Download size={18} /> Scarica PDF
+            <Download size={18} /> {t.downloadPdf}
           </button>
           <button 
             onClick={downloadTxt}
             disabled={loading || !aiReport}
             className="flex-1 min-w-[150px] bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 px-6 py-4 rounded-2xl font-black transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest disabled:opacity-50 shadow-sm active:scale-95"
           >
-            <FileDown size={18} /> Scarica TXT
+            <FileDown size={18} /> {t.downloadTxt}
           </button>
           <button className="flex-1 min-w-[150px] bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-2xl font-black transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest shadow-xl shadow-blue-100 active:scale-95">
-            <Share2 size={18} /> Condividi
+            <Share2 size={18} /> {t.share}
           </button>
           <button 
             onClick={onClose}
             className="flex-1 min-w-[150px] bg-slate-900 hover:bg-black text-white px-6 py-4 rounded-2xl font-black transition-all text-[10px] uppercase tracking-widest shadow-lg active:scale-95"
           >
-            Torna alla Home
+            {t.backToHome}
           </button>
         </div>
       </div>
