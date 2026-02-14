@@ -12,6 +12,9 @@ const KEYS = {
   CUSTOM_EXERCISES: 'hpro_custom_exercises_v1'
 };
 
+// Utilizzo di un bucket persistente dedicato per evitare collisioni
+const SYNC_URL = 'https://kvdb.io/MWq5E9k2Y5E8J3fQ2z4Z6y/'; 
+
 const getDeviceType = (): 'Mobile' | 'Desktop' | 'Tablet' | 'Unknown' => {
   const ua = navigator.userAgent;
   if (/(tablet|ipad|playbook|silk)|(android(?!.*mobi))/i.test(ua)) return 'Tablet';
@@ -25,7 +28,7 @@ export const storage = {
     const saved = localStorage.getItem(KEYS.USER_PROFILE);
     if (saved) return JSON.parse(saved);
     return {
-      id: Math.random().toString(36).substr(2, 9),
+      id: Math.random().toString(36).substr(2, 9).toUpperCase(),
       firstName: 'Operatore',
       lastName: 'HandballPro',
       society: 'Nessuna Società',
@@ -171,6 +174,94 @@ export const storage = {
     return saved ? JSON.parse(saved) : [];
   },
   setCalendar: (cal: ScheduledMatch[]) => localStorage.setItem(KEYS.CALENDAR, JSON.stringify(cal)),
+
+  // Cloud Sync Improved with PIN Security
+  pushToCloud: async (userId: string): Promise<{success: boolean, error?: string}> => {
+    try {
+      const user = storage.getUser();
+      const data = {
+        matches: storage.getMatches(),
+        registries: storage.getAllRegistries(),
+        calendar: storage.getCalendar(),
+        trainings: storage.getTrainings(),
+        customExercises: storage.getCustomExercises(),
+        exportedAt: new Date().toISOString(),
+        securityPin: user.pin || '0000', // Include current PIN for authentication on other devices
+        userData: {
+          firstName: user.firstName,
+          lastName: user.lastName,
+          society: user.society,
+          position: user.position,
+          role: user.role
+        }
+      };
+      
+      const payload = JSON.stringify(data);
+      // Controllo dimensione approssimativa (64KB limite tipico KV free)
+      if (payload.length > 65536) {
+        return { success: false, error: "Database troppo grande per la sincronizzazione cloud (Max 64KB)." };
+      }
+
+      const response = await fetch(`${SYNC_URL}${userId.trim()}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: payload
+      });
+
+      if (!response.ok) {
+        return { success: false, error: `Errore Server: ${response.status}` };
+      }
+
+      return { success: true };
+    } catch (e) {
+      console.error("Cloud push error", e);
+      return { success: false, error: "Errore di rete. Controlla la connessione." };
+    }
+  },
+
+  pullFromCloud: async (userId: string, pin: string): Promise<{success: boolean, error?: string}> => {
+    try {
+      const response = await fetch(`${SYNC_URL}${userId.trim()}`);
+      if (!response.ok) {
+        return { success: false, error: "ID Sorgente non trovato." };
+      }
+      
+      const text = await response.text();
+      if (!text || text === "null") return { success: false, error: "Nessun dato salvato per questo ID." };
+      
+      const data = JSON.parse(text);
+      
+      // Verification of security PIN
+      const storedPin = data.securityPin || '0000';
+      if (storedPin !== pin) {
+        return { success: false, error: "PIN di sicurezza errato per questo ID." };
+      }
+      
+      // Update local storage
+      if (data.matches) localStorage.setItem(KEYS.MATCHES, JSON.stringify(data.matches));
+      if (data.registries) localStorage.setItem(KEYS.REGISTRIES, JSON.stringify(data.registries));
+      if (data.calendar) storage.setCalendar(data.calendar);
+      if (data.trainings) localStorage.setItem(KEYS.TRAININGS, JSON.stringify(data.trainings));
+      if (data.customExercises) localStorage.setItem(KEYS.CUSTOM_EXERCISES, JSON.stringify(data.customExercises));
+      
+      // Optional: Restore user profile too (excluding local device specific ID)
+      if (data.userData) {
+        const currentUser = storage.getUser();
+        storage.setUser({
+          ...currentUser,
+          ...data.userData,
+          pin: storedPin
+        });
+      }
+      
+      return { success: true };
+    } catch (e) {
+      console.error("Cloud pull error", e);
+      return { success: false, error: "Errore durante il recupero dei dati. ID non valido?" };
+    }
+  },
 
   // Data management
   exportData: (data: any, filename: string) => {

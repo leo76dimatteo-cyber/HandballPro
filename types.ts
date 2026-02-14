@@ -40,6 +40,7 @@ export interface UserProfile {
   pin?: string;
   language?: Language;
   lastActive?: number;
+  lastSync?: number;
   deviceName?: string;
 }
 
